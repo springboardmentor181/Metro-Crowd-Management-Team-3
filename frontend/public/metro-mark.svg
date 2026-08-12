@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MetroFlow">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#37a6ff"/><stop offset="1" stop-color="#2ed5c4"/></linearGradient></defs>
+  <rect width="64" height="64" rx="18" fill="#0d1b2a"/>
+  <path d="M18 43V20c0-5 4-9 9-9h10c5 0 9 4 9 9v23" fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M22 29h20M24 45l-5 7m21-7 5 7" stroke="#edf6ff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="26" cy="38" r="3" fill="#edf6ff"/><circle cx="38" cy="38" r="3" fill="#edf6ff"/>
+</svg>
