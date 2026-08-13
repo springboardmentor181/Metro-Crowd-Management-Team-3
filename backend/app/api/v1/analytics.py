@@ -1,0 +1,54 @@
+from fastapi import APIRouter, Depends, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from app.core.security import get_current_user
+from app.database.session import get_db
+from app.models.user_profile import UserProfile
+from app.schemas.prediction import PredictionResponse
+from app.services import analytics_service
+
+router = APIRouter(
+    prefix="/analytics",
+    tags=["Analytics"]
+)
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+@router.get("/traffic-report")
+@limiter.limit("20/minute")
+def traffic_analysis_report(
+    request: Request,
+    hours: int = 24,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Traffic analysis reports (Milestone 2 outcome)."""
+    return analytics_service.traffic_analysis_report(db, hours, state)
+
+
+@router.get("/operational-summary")
+@limiter.limit("20/minute")
+def operational_summary(
+    request: Request,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    return analytics_service.operational_monitoring_summary(db, state)
+
+
+@router.get("/prediction-insights", response_model=list[PredictionResponse])
+@limiter.limit("20/minute")
+def prediction_insights(
+    request: Request,
+    limit: int = 20,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """AI prediction insights feed for the analytics dashboard."""
+    return analytics_service.prediction_insights(db, limit, state)
