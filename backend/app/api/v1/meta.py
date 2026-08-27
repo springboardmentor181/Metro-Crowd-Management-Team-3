@@ -1,4 +1,12 @@
-from fastapi import APIRouter, Depends
+"""State-wise metadata for the frontend's navbar state selector.
+
+Not a data module of its own - just aggregates Station/Train counts
+per state so the UI knows which states have real, seeded data (and
+which ones need more CSV rows before they're worth showing).
+"""
+import math
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -6,13 +14,12 @@ from app.database.session import get_db
 from app.models.station import Station
 from app.models.train import Train
 from app.models.train_schedule import TrainSchedule
-from app.utils.geo import MIN_STATIONS_FOR_SUFFICIENT_DATA, STATE_CITY_MAP
+from app.utils.geo import MIN_STATIONS_FOR_SUFFICIENT_DATA, STATE_CITY_MAP, state_for_city
 
 router = APIRouter(
     prefix="/meta",
     tags=["Meta"]
 )
-
 
 @router.get("/states")
 def list_states(db: Session = Depends(get_db)):
@@ -47,7 +54,6 @@ def list_states(db: Session = Depends(get_db)):
         })
 
     return sorted(results, key=lambda r: r["state"])
-
 
 @router.get("/cities")
 def list_cities(db: Session = Depends(get_db)):
@@ -86,3 +92,51 @@ def list_cities(db: Session = Depends(get_db)):
         })
 
     return sorted(results, key=lambda r: r["city"])
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance in km between two real lat/lng points."""
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+@router.get("/nearest-city")
+def nearest_city(
+    lat: float = Query(..., ge=-90, le=90, description="Browser geolocation latitude"),
+    lng: float = Query(..., ge=-180, le=180, description="Browser geolocation longitude"),
+    db: Session = Depends(get_db),
+):
+    """Given the rider's real GPS coordinates (from the browser's
+    Geolocation permission), finds the closest MetroFlow city using
+    each seeded station's real latitude/longitude - no hardcoded city
+    centroids, no fake data. Powers the "Use my location" control in
+    the navbar city picker.
+    """
+    stations = (
+        db.query(Station.city, Station.latitude, Station.longitude)
+        .filter(Station.is_active.is_(True))
+        .all()
+    )
+    if not stations:
+        raise HTTPException(status_code=404, detail="No seeded stations to match against yet")
+
+    best_city = None
+    best_distance = None
+    for city, station_lat, station_lng in stations:
+        if station_lat is None or station_lng is None:
+            continue
+        distance = _haversine_km(lat, lng, station_lat, station_lng)
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_city = city
+
+    if best_city is None:
+        raise HTTPException(status_code=404, detail="No station coordinates available to match against")
+
+    return {
+        "city": best_city,
+        "state": state_for_city(best_city),
+        "distance_km": round(best_distance, 1),
+    }

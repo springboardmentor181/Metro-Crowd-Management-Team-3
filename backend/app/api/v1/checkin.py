@@ -1,3 +1,5 @@
+"""Passenger entry (check-in) - source of the "Passenger Entry & Exit
+Records" dataset, and drives live crowd counts."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -11,7 +13,6 @@ router = APIRouter(
     prefix="/checkin",
     tags=["Check-In"]
 )
-
 
 @router.post("/", response_model=JourneyResponse, status_code=201)
 def check_in(
