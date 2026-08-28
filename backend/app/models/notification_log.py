@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 from sqlalchemy import DateTime
@@ -14,7 +13,6 @@ from app.database.base import Base
 from app.enums.notification_channel import NotificationChannel
 from app.enums.notification_status import NotificationStatus
 from app.mixins.timestamp import TimestampMixin
-
 
 class NotificationLog(TimestampMixin, Base):
 

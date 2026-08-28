@@ -11,7 +11,6 @@ from app.models.train import Train
 from app.models.train_schedule import TrainSchedule
 from app.simulator.station_generator import DEMO_LINE, DEMO_STATIONS, DEMO_TRAINS
 
-
 def seed() -> None:
     create_tables()
     db = SessionLocal()
@@ -21,12 +20,10 @@ def seed() -> None:
             print("Database already seeded, skipping.")
             return
 
-        # --- Stations ---
         stations = [Station(**data) for data in DEMO_STATIONS]
         db.add_all(stations)
-        db.flush()  # get IDs without committing
+        db.flush()                              
 
-        # --- Metro line + ordered stops ---
         line = MetroLine(**DEMO_LINE)
         db.add(line)
         db.flush()
@@ -39,10 +36,10 @@ def seed() -> None:
                 distance_from_previous=2.5 if order > 1 else 0,
             ))
 
-        # --- Trains ---
         trains = [Train(**data) for data in DEMO_TRAINS]
         db.add_all(trains)
         db.flush()
+
         base_hour = 6
         for t_index, train in enumerate(trains):
             for s_index, station in enumerate(stations):
@@ -62,7 +59,6 @@ def seed() -> None:
                     frequency_minutes=5 if is_peak else 12,
                 ))
 
-        # --- Initial crowd snapshot ---
         for station in stations:
             db.add(CrowdLog(
                 station_id=station.id,
@@ -80,7 +76,6 @@ def seed() -> None:
 
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     seed()

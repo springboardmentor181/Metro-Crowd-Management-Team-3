@@ -1,4 +1,3 @@
-
 from sqlalchemy import Boolean
 from sqlalchemy import Enum
 from sqlalchemy import String
@@ -12,7 +11,6 @@ from sqlalchemy.orm import relationship
 from app.database.base import Base
 from app.enums.user_role import UserRole
 from app.mixins.timestamp import TimestampMixin
-
 
 class UserProfile(TimestampMixin, Base):
 

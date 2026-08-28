@@ -1,12 +1,14 @@
-
 import argparse
 import os
+from datetime import date, datetime
 
 import pandas as pd
+from sqlalchemy import text
 
 from app.database.init_db import create_tables
 from app.database.session import SessionLocal
 from app.enums.day_type import DayType
+from app.enums.schedule_status import ScheduleStatus
 from app.models.alert import Alert
 from app.models.crowd_log import CrowdLog
 from app.models.journey import Journey
@@ -19,22 +21,13 @@ from app.models.train_location import TrainLocation
 from app.models.train_schedule import TrainSchedule
 
 DEFAULT_DATASET_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "datasets")
+
 LINE_COLORS = ["#1E88E5", "#8E24AA", "#E53935", "#00897B", "#6A1B9A", "#F4511E"]
 NAMED_LINE_COLORS = {
-    "yellow": "#EAB308",
-    "blue": "#2563EB",
-    "red": "#DC2626",
-    "green": "#16A34A",
-    "violet": "#7C3AED",
-    "magenta": "#DB2777",
-    "pink": "#EC4899",
-    "grey": "#6B7280",
-    "gray": "#6B7280",
-    "purple": "#9333EA",
-    "orange": "#EA580C",
-    "aqua": "#06B6D4",
+    "yellow": "#EAB308", "blue": "#2563EB", "red": "#DC2626", "green": "#16A34A",
+    "violet": "#7C3AED", "magenta": "#DB2777", "pink": "#EC4899", "grey": "#6B7280",
+    "gray": "#6B7280", "purple": "#9333EA", "orange": "#EA580C", "aqua": "#06B6D4",
 }
-
 
 def _color_for_line(line_name: str, fallback_index: int) -> str:
     lowered = line_name.lower()
@@ -43,84 +36,23 @@ def _color_for_line(line_name: str, fallback_index: int) -> str:
             return color
     return LINE_COLORS[fallback_index % len(LINE_COLORS)]
 
-
-def _norm_key(city: str, name: str) -> tuple[str, str]:
-    return city.strip().lower(), name.strip().lower()
-
-
 def _load_csvs(dataset_dir: str) -> dict[str, pd.DataFrame]:
+    # Gzipped (.csv.gz) to stay under GitHub's 100MB per-file push limit -
+    # pandas infers the compression from the ".gz" extension on its own,
+    # so pd.read_csv below needs no other change.
     paths = {
-        "passenger_flow": os.path.join(dataset_dir, "passenger_flow.csv"),
-        "stations": os.path.join(dataset_dir, "stations.csv"),
-        "train_operations": os.path.join(dataset_dir, "train_operations.csv"),
-        "predictive_maintenance": os.path.join(dataset_dir, "predictive_maintenance.csv"),
+        "stations": os.path.join(dataset_dir, "stations.csv.gz"),
+        "trains": os.path.join(dataset_dir, "trains.csv.gz"),
+        "passenger_flow": os.path.join(dataset_dir, "passenger_flow.csv.gz"),
+        "train_operations": os.path.join(dataset_dir, "train_operations.csv.gz"),
     }
     missing = [name for name, p in paths.items() if not os.path.exists(p)]
     if missing:
         raise FileNotFoundError(
-            f"Missing CSV(s) in {dataset_dir}: {', '.join(missing)}.csv - "
-            f"copy your 4 real CSVs there first (or pass --dir)."
+            f"Missing CSV(s) in {dataset_dir}: {', '.join(missing)}.csv.gz - "
+            f"copy your 4 real gzipped CSVs there first (or pass --dir)."
         )
     return {name: pd.read_csv(p) for name, p in paths.items()}
-
-
-def _clean_stations(stations_raw: pd.DataFrame) -> pd.DataFrame:
-    stations = stations_raw.rename(
-        columns={"City": "city", "Station": "station_name", "Line": "line",
-                 "Latitude": "latitude", "Longitude": "longitude"}
-    ).copy()
-
-    # Basic cleaning: strip whitespace, drop exact duplicates, drop any
-    # row missing a required field (shouldn't happen on the real file,
-    # but keep the script safe against a re-export with gaps).
-    for col in ["city", "station_name", "line"]:
-        stations[col] = stations[col].astype(str).str.strip()
-    stations = stations.drop_duplicates(subset=["city", "station_name"])
-    stations = stations.dropna(subset=["city", "station_name", "line", "latitude", "longitude"])
-
-    stations = stations.reset_index(drop=True)
-    stations["_csv_order"] = stations.index
-
-    stations = stations.sort_values(["city", "line", "station_name"]).reset_index(drop=True)
-    stations["station_id"] = stations.index + 1
-    return stations
-
-
-def _clean_passenger_flow(passenger_flow: pd.DataFrame, station_id_map: dict) -> pd.DataFrame:
-    df = passenger_flow.copy()
-    df["station_name"] = df["station_name"].astype(str).str.strip()
-    df["city"] = df["city"].astype(str).str.strip()
-    df["_key"] = df.apply(lambda r: _norm_key(r["city"], r["station_name"]), axis=1)
-    df["station_id"] = df["_key"].map(station_id_map)
-    before = len(df)
-    df = df.dropna(subset=["station_id", "entries", "exits"])
-    dropped = before - len(df)
-    if dropped:
-        print(f"passenger_flow: dropped {dropped} row(s) that didn't match a known station")
-    df["station_id"] = df["station_id"].astype(int)
-    df["entries"] = df["entries"].clip(lower=0)
-    df["exits"] = df["exits"].clip(lower=0)
-    return df
-
-
-def _clean_train_operations(train_ops: pd.DataFrame, station_id_map: dict) -> pd.DataFrame:
-    tdf = train_ops.copy()
-    tdf["station_name"] = tdf["station_name"].astype(str).str.strip()
-    tdf["city"] = tdf["city"].astype(str).str.strip()
-    tdf["_key"] = tdf.apply(lambda r: _norm_key(r["city"], r["station_name"]), axis=1)
-    tdf["station_id"] = tdf["_key"].map(station_id_map)
-    before = len(tdf)
-    tdf = tdf.dropna(subset=["station_id"])
-    dropped = before - len(tdf)
-    if dropped:
-        print(f"train_operations: dropped {dropped} row(s) that didn't match a known station")
-    tdf["station_id"] = tdf["station_id"].astype(int)
-    tdf["delay_reason"] = tdf["delay_reason"].fillna("None")
-    tdf["delay_arrival_min"] = tdf["delay_arrival_min"].fillna(0).clip(lower=0)
-    tdf["scheduled_arrival"] = pd.to_datetime(tdf["scheduled_arrival"])
-    tdf["scheduled_departure"] = pd.to_datetime(tdf["scheduled_departure"])
-    return tdf
-
 
 def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
     create_tables()
@@ -128,51 +60,47 @@ def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
 
     try:
         if reset:
-            print("--reset: clearing existing station/line/train schedule/crowd data...")
-            db.query(Journey).delete()
-            db.query(Prediction).delete()
-            db.query(TrainLocation).delete()
-            db.query(Alert).delete()
-            db.query(CrowdLog).delete()
-            db.query(TrainSchedule).delete()
-            db.query(LineStation).delete()
-            db.query(MetroLine).delete()
-            db.query(Station).delete()
-            db.query(Train).delete()
+            print("--reset: clearing existing station/line/train/schedule/crowd data...")
+                                                                         
+            db.execute(text(
+                "TRUNCATE TABLE journeys, predictions, train_locations, alerts, "
+                "crowd_logs, train_schedules, line_stations, metro_lines, "
+                "stations, trains RESTART IDENTITY CASCADE"
+            ))
             db.commit()
         elif db.query(Station).count() > 0:
-            print("Database already has stations - pass --reset to wipe and reseed with real data.")
+            print("Database already has stations - pass --reset to wipe and reseed with the new dataset.")
             return
 
         raw = _load_csvs(dataset_dir)
-        stations_df = _clean_stations(raw["stations"])
-        station_id_map = dict(
-            zip(
-                stations_df.apply(lambda r: _norm_key(r["city"], r["station_name"]), axis=1),
-                stations_df["station_id"],
-            )
+
+        stations_df = raw["stations"].copy()
+        for col in ["station_id", "city", "line", "station_name", "station_type"]:
+            stations_df[col] = stations_df[col].astype(str).str.strip()
+        stations_df = stations_df.drop_duplicates(subset=["station_id"]).dropna(
+            subset=["station_id", "city", "line", "station_name", "latitude", "longitude"]
         )
 
-        # --- Stations (real, one row per real station across 12 cities) ---
-        station_rows = []
+        station_rows: dict[str, Station] = {}
+        station_list: list[Station] = []
         for _, row in stations_df.iterrows():
-            code = "".join(ch for ch in row["city"].upper() if ch.isalpha())[:3] + f"{int(row['station_id']):03d}"
-            station_rows.append(Station(
-                station_code=code,
+            station = Station(
+                station_code=row["station_id"],
                 station_name=row["station_name"],
                 city=row["city"],
                 latitude=float(row["latitude"]),
                 longitude=float(row["longitude"]),
                 is_interchange=False,
                 capacity=5000,
-            ))
-        db.add_all(station_rows)
-        db.flush()  # assign real DB ids
-
-        db_station_by_ordinal = dict(zip(stations_df["station_id"], station_rows))
+            )
+            station_list.append(station)
+            station_rows[row["station_id"]] = station
+        db.add_all(station_list)
+        db.flush()                      
 
         line_keys = stations_df[["city", "line"]].drop_duplicates().reset_index(drop=True)
         line_by_key: dict[tuple[str, str], MetroLine] = {}
+        line_list: list[MetroLine] = []
         for i, (_, lrow) in enumerate(line_keys.iterrows()):
             city_slug = "".join(ch for ch in lrow["city"].upper() if ch.isalpha())[:3]
             line_slug = "".join(ch for ch in lrow["line"].upper() if ch.isalpha())[:4]
@@ -181,61 +109,100 @@ def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
                 line_name=f"{lrow['city']} Metro - {lrow['line']}",
                 color=_color_for_line(lrow["line"], i),
             )
-            db.add(line)
+            line_list.append(line)
             line_by_key[(lrow["city"], lrow["line"])] = line
+        db.add_all(line_list)
         db.flush()
 
+        line_station_list: list[LineStation] = []
         for _, srow in stations_df.iterrows():
             line = line_by_key[(srow["city"], srow["line"])]
-            same_line_stations = stations_df[
-                (stations_df["city"] == srow["city"]) & (stations_df["line"] == srow["line"])
-            ].sort_values("_csv_order").reset_index(drop=True)
-            order = int(same_line_stations.index[same_line_stations["station_id"] == srow["station_id"]][0]) + 1
-            db.add(LineStation(
+            line_station_list.append(LineStation(
                 line_id=line.id,
-                station_id=db_station_by_ordinal[srow["station_id"]].id,
-                station_order=order,
-                distance_from_previous=2.5 if order > 1 else 0,
+                station_id=station_rows[srow["station_id"]].id,
+                station_order=int(srow["station_sequence"]),
+                distance_from_previous=2.5 if int(srow["station_sequence"]) > 1 else 0,
             ))
-        train_ids = sorted(set(raw["predictive_maintenance"]["train_id"].astype(str).str.strip()) |
-                            set(raw["train_operations"]["train_id"].astype(str).str.strip()))
+        db.add_all(line_station_list)
+
+        trains_df = raw["trains"].copy()
+        trains_df["train_id"] = trains_df["train_id"].astype(str).str.strip()
+        trains_df["commissioned_date"] = pd.to_datetime(trains_df["commissioned_date"])
+
         train_by_number: dict[str, Train] = {}
-        for train_number in train_ids:
-            train = Train(train_number=train_number, capacity=1200)
-            db.add(train)
-            train_by_number[train_number] = train
+        train_list: list[Train] = []
+        for _, trow in trains_df.iterrows():
+            train = Train(
+                train_number=trow["train_id"],
+                capacity=int(trow["capacity_passengers"]),
+                commissioned_date=trow["commissioned_date"].date(),
+            )
+            train_list.append(train)
+            train_by_number[trow["train_id"]] = train
+        db.add_all(train_list)
         db.flush()
 
-        ops_df = _clean_train_operations(raw["train_operations"], station_id_map)
-        schedule_rows = []
+       
+        db.commit()
+        print(f"  stations/lines/trains: {len(station_list)} stations, "
+              f"{len(line_list)} lines, {len(train_list)} trains committed.")
+
+        ops_df = raw["train_operations"].copy()
+        ops_df["station_id"] = ops_df["station_id"].astype(str).str.strip()
+        ops_df["train_id"] = ops_df["train_id"].astype(str).str.strip()
+        ops_df["delay_reason"] = ops_df["delay_reason"].fillna("None")
+        ops_df["delay_arrival_min"] = ops_df["delay_arrival_min"].fillna(0).clip(lower=0)
+        ops_df["scheduled_arrival"] = pd.to_datetime(ops_df["scheduled_arrival"])
+        ops_df["scheduled_departure"] = pd.to_datetime(ops_df["scheduled_departure"])
+
+        CHUNK_SIZE = 5000
+        schedule_dicts: list[dict] = []
+        dropped = 0
+        inserted = 0
         for _, orow in ops_df.iterrows():
-            train = train_by_number.get(str(orow["train_id"]).strip())
-            db_station = db_station_by_ordinal.get(int(orow["station_id"]))
+            train = train_by_number.get(orow["train_id"])
+            db_station = station_rows.get(orow["station_id"])
             if not train or not db_station:
+                dropped += 1
                 continue
             is_weekend = int(orow["scheduled_arrival"].weekday() >= 5)
             hour = orow["scheduled_arrival"].hour
             is_peak = 8 <= hour <= 11 or 17 <= hour <= 20
-            schedule_rows.append(TrainSchedule(
-                train_id=train.id,
-                station_id=db_station.id,
-                arrival_time=orow["scheduled_arrival"].time(),
-                departure_time=orow["scheduled_departure"].time(),
-                platform_number=(int(orow["station_sequence"]) % 2) + 1,
-                day_type=DayType.WEEKEND if is_weekend else DayType.WEEKDAY,
-                is_peak_hour=bool(is_peak),
-                frequency_minutes=5 if is_peak else 12,
-                delay_minutes=int(round(orow["delay_arrival_min"])),
-            ))
-        db.add_all(schedule_rows)
+            delay_minutes = int(round(orow["delay_arrival_min"]))
+            schedule_dicts.append({
+                "train_id": train.id,
+                "station_id": db_station.id,
+                "arrival_time": orow["scheduled_arrival"].time(),
+                "departure_time": orow["scheduled_departure"].time(),
+                "platform_number": (int(orow["station_sequence"]) % 2) + 1,
+                "day_type": DayType.WEEKEND if is_weekend else DayType.WEEKDAY,
+                "is_peak_hour": bool(is_peak),
+                "frequency_minutes": 5 if is_peak else 12,
+                "delay_minutes": delay_minutes,
+                "status": ScheduleStatus.DELAYED if delay_minutes > 0 else ScheduleStatus.ON_TIME,
+            })
+            if len(schedule_dicts) >= CHUNK_SIZE:
+                db.bulk_insert_mappings(TrainSchedule, schedule_dicts)
+                db.commit()
+                inserted += len(schedule_dicts)
+                print(f"  train_schedules: {inserted}/{len(ops_df) - dropped} inserted...", end="\r")
+                schedule_dicts = []
+        if schedule_dicts:
+            db.bulk_insert_mappings(TrainSchedule, schedule_dicts)
+            db.commit()
+            inserted += len(schedule_dicts)
+        if dropped:
+            print(f"\ntrain_operations: dropped {dropped} row(s) with an unknown station_id/train_id")
+        print(f"  train_schedules: {inserted} inserted (done).")
 
-        flow_df = _clean_passenger_flow(raw["passenger_flow"], station_id_map)
-        flow_df["passenger_count"] = flow_df["entries"] + flow_df["exits"]
+        flow_df = raw["passenger_flow"].copy()
+        flow_df["station_id"] = flow_df["station_id"].astype(str).str.strip()
+        flow_df["passenger_count"] = flow_df["entries"].clip(lower=0) + flow_df["exits"].clip(lower=0)
         recent_avg = flow_df.groupby("station_id")["passenger_count"].mean()
 
         crowd_rows = []
-        for ordinal, db_station in db_station_by_ordinal.items():
-            avg_count = recent_avg.get(ordinal, db_station.capacity * 0.2)
+        for station_id, db_station in station_rows.items():
+            avg_count = recent_avg.get(station_id, db_station.capacity * 0.2)
             crowd_rows.append(CrowdLog(
                 station_id=db_station.id,
                 current_count=int(min(avg_count, db_station.capacity)),
@@ -246,17 +213,14 @@ def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
         print(
             f"Seeded {len(station_rows)} real stations across "
             f"{stations_df['city'].nunique()} cities, {len(line_by_key)} lines, "
-            f"{len(train_by_number)} trains, {len(schedule_rows)} real schedule "
-            f"entries (from train_operations.csv), and {len(crowd_rows)} crowd "
-            f"snapshots (from passenger_flow.csv averages).\n"
-            f"Station IDs are ordinal 1..{len(station_rows)} in city/line/name "
-            f"order - matches Step 5 of the Colab training notebook, so a\n"
-            f"prediction for station_id=N here means the same real station."
+            f"{len(train_by_number)} trains (real capacity + commissioned_date "
+            f"from trains.csv), {inserted} real schedule entries, and "
+            f"{len(crowd_rows)} crowd snapshots - EVERY station now has real "
+            f"passenger_flow.csv coverage (this dataset covers all "
+            f"{len(station_rows)}, not just 6 like the previous one)."
         )
-
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

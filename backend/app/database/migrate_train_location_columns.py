@@ -1,9 +1,7 @@
-
 from sqlalchemy import text
 
 from app.core.config import settings
 from app.database.database import engine
-
 
 STATEMENTS = [
     "ALTER TABLE train_locations ADD COLUMN IF NOT EXISTS next_station_id INTEGER REFERENCES stations(id)",
@@ -29,7 +27,6 @@ END $$;
 
 REQUIRED_COLUMNS = {"next_station_id", "progress_ratio", "status"}
 
-
 def _masked_database_url() -> str:
     url = settings.DATABASE_URL
     if "@" in url and "//" in url:
@@ -38,7 +35,6 @@ def _masked_database_url() -> str:
         user = creds.split(":", 1)[0]
         return f"{scheme}//{user}:***@{rest}"
     return url
-
 
 def run():
     print(f"Connecting to: {_masked_database_url()}\n")
@@ -72,7 +68,6 @@ def run():
     else:
         print("\n✅ Verified: `train_locations` has next_station_id, progress_ratio, status.")
         print("Restart uvicorn (if it's running) to pick up live train tracking.")
-
 
 if __name__ == "__main__":
     run()

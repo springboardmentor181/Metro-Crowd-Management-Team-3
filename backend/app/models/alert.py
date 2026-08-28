@@ -16,7 +16,6 @@ from app.database.base import Base
 from app.enums.alert_type import AlertType
 from app.mixins.timestamp import TimestampMixin
 
-
 class Alert(TimestampMixin, Base):
 
     __tablename__ = "alerts"

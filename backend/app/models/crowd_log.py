@@ -1,5 +1,6 @@
 from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
+from sqlalchemy import Index
 from sqlalchemy import Integer
 
 from sqlalchemy.orm import Mapped
@@ -10,10 +11,17 @@ from app.database.base import Base
 from app.enums.crowd_level import CrowdLevel
 from app.mixins.timestamp import TimestampMixin
 
-
 class CrowdLog(TimestampMixin, Base):
 
     __tablename__ = "crowd_logs"
+
+    __table_args__ = (
+        Index(
+            "ix_crowd_logs_station_id_created_at",
+            "station_id",
+            "created_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

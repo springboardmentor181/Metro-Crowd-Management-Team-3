@@ -6,9 +6,8 @@ from app.database.session import SessionLocal
 from app.enums.user_role import UserRole
 from app.models.user_profile import UserProfile
 
-
 def set_role(email: str, role_value: str) -> None:
-    role = UserRole(role_value)  # raises ValueError if invalid
+    role = UserRole(role_value)                                
     db = SessionLocal()
 
     try:
@@ -29,9 +28,7 @@ def set_role(email: str, role_value: str) -> None:
 
         profile = db.get(UserProfile, user_id)
         if profile is None:
-            # They haven't hit any authenticated backend route yet, so no
-            # profile row exists - create one now instead of waiting for
-            # their first API call.
+                                                                         
             profile = UserProfile(
                 id=user_id,
                 email=user_email,
@@ -47,7 +44,6 @@ def set_role(email: str, role_value: str) -> None:
 
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

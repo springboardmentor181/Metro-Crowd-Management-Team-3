@@ -1,12 +1,9 @@
-
 from sqlalchemy import text
 
 from app.core.config import settings
 from app.database.database import engine
 
-
 STATEMENT = "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username VARCHAR(50)"
-
 
 def _masked_database_url() -> str:
     url = settings.DATABASE_URL
@@ -16,7 +13,6 @@ def _masked_database_url() -> str:
         user = creds.split(":", 1)[0]
         return f"{scheme}//{user}:***@{rest}"
     return url
-
 
 def run():
     print(f"Connecting to: {_masked_database_url()}\n")
@@ -41,7 +37,6 @@ def run():
     else:
         print("\n✅ Verified: `user_profiles` table now has `username`.")
         print("Restart uvicorn (if it's running) and try signing up again.")
-
 
 if __name__ == "__main__":
     run()
