@@ -1,0 +1,64 @@
+City,Station,Line,Latitude,Longitude
+Delhi,Adarsh Nagar,Yellow Line,28.7144008,77.1672884
+Delhi,AIIMS,Yellow Line,28.5668602,77.2078058
+Delhi,Akshardham,Blue Line,28.61784195,77.27948814325397
+Delhi,Anand Vihar ISBT,Blue Line branch,28.6467533,77.3180037
+Delhi,Central Secretariat,Yellow Line,28.6158794,77.2122822
+Delhi,Dwarka Sector 21,Blue Line,28.5518376,77.0586489
+Delhi,Kashmere Gate,Red Line,28.6675,77.2282
+Kolkata,Salt Lake Sector V,Green Line,22.5804,88.4378
+Kolkata,Howrah,Green Line,22.5849,88.3416
+Kolkata,Esplanade,Green Line,22.5644,88.3517
+Kolkata,Dakshineswar,Blue Line,22.6562,88.3533
+Kolkata,Dum Dum,Blue Line,22.6203,88.3779
+Kolkata,Park Street,Blue Line,22.5532,88.3514
+Hyderabad,Miyapur,Red Line,17.4968,78.3614
+Hyderabad,Ameerpet,Red Line,17.4375,78.4482
+Hyderabad,Nagole,Blue Line,17.4254,78.5684
+Hyderabad,Raidurg,Blue Line,17.4428,78.3785
+Hyderabad,MG Bus Station,Green Line,17.3778,78.4812
+Hyderabad,Secunderabad East,Blue Line,17.4429,78.5036
+Chennai,Chennai Central,Blue Line,13.0827,80.2707
+Chennai,Chennai Airport,Blue Line,12.9816,80.1764
+Chennai,Alandur,Blue Line,13.0039,80.2014
+Chennai,Koyambedu,Green Line,13.0733,80.1947
+Chennai,Washermanpet,Blue Line,13.1114,80.2792
+Bengaluru,Majestic,Purple Line,12.9756,77.5728
+Bengaluru,Indiranagar,Purple Line,12.9784,77.6385
+Bengaluru,MG Road,Purple Line,12.9743,77.6111
+Bengaluru,Whitefield,Purple Line,12.9697,77.7497
+Bengaluru,Yelachenahalli,Green Line,12.8962,77.5731
+Bengaluru,Jayanagar,Green Line,12.9272,77.5801
+Mumbai,Versova,Line 1,19.1291,72.8254
+Mumbai,Andheri,Line 1,19.1197,72.8464
+Mumbai,Ghatkopar,Line 1,19.0863,72.9081
+Mumbai,Gundavali,Line 7,19.1158,72.8564
+Mumbai,Dahisar East,Line 7,19.2507,72.8596
+Mumbai,DN Nagar,Line 2A,19.1244,72.8314
+Lucknow,CCS Airport,Red Line,26.7607,80.8893
+Lucknow,Hazratganj,Red Line,26.8504,80.9442
+Lucknow,Munshi Pulia,Red Line,26.8924,80.9991
+Lucknow,Charbagh,Red Line,26.8322,80.9149
+Jaipur,Mansarovar,Pink Line,26.8778,75.7533
+Jaipur,Chandpole,Pink Line,26.9231,75.8078
+Jaipur,Badi Chaupar,Pink Line,26.9244,75.8314
+Jaipur,Sindhi Camp,Pink Line,26.9222,75.7981
+Ahmedabad,Vastral Gam,East-West Line,23.0069,72.6631
+Ahmedabad,Thaltej,East-West Line,23.0489,72.5122
+Ahmedabad,APMC,North-South Line,22.9804,72.5481
+Ahmedabad,Motera Stadium,North-South Line,23.0911,72.5978
+Ahmedabad,Kalupur Station,East-West Line,23.0289,72.6014
+Kochi,Aluva,Blue Line,10.1094,76.3478
+Kochi,Ernakulam South,Blue Line,9.9654,76.2954
+Kochi,MG Road,Blue Line,9.9789,76.2814
+Kochi,Petta,Blue Line,9.9531,76.3314
+Kochi,Edappally,Blue Line,10.0254,76.3114
+Bhopal,AIIMS Bhopal,Orange Line,23.2044,77.4589
+Bhopal,Subhash Nagar,Orange Line,23.2422,77.4331
+Bhopal,Karond,Orange Line,23.2989,77.3978
+Bhopal,Board Office,Orange Line,23.2311,77.4289
+Pune,Pimpri Chinchwad,Purple Line,18.6278,73.8012
+Pune,Swargate,Purple Line,18.5019,73.8564
+Pune,Vanaz,Aqua Line,18.5089,73.8089
+Pune,Ramwadi,Aqua Line,18.5511,73.9144
+Pune,Civil Court,Purple Line,18.5289,73.8514
