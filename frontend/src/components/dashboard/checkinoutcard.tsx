@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -7,14 +8,21 @@ import { Button } from "@/components/ui/Button";
 import { useApiData } from "@/hooks/useApiData";
 import { useStations } from "@/hooks/useStations";
 import { checkIn, checkOut, getActiveJourney } from "@/lib/api/journeys";
+import { queryKeys } from "@/lib/queryKeys";
 
 export default function CheckInOutCard() {
-  const { data: stations, loading: stationsLoading } = useStations();
+  const {
+    data: stations,
+    loading: stationsLoading,
+    error: stationsError,
+    refresh: refreshStations,
+  } = useStations();
   const {
     data: activeJourney,
     loading: journeyLoading,
+    error: journeyError,
     refresh: refreshJourney,
-  } = useApiData(getActiveJourney, []);
+  } = useApiData(queryKeys.activeJourney, getActiveJourney, []);
 
   const [sourceId, setSourceId] = useState<number | "">("");
   const [destinationId, setDestinationId] = useState<number | "">("");
@@ -85,6 +93,30 @@ export default function CheckInOutCard() {
 
       {error && (
         <p className="mb-6 rounded-xl bg-red-500/10 p-3 text-sm text-red-500">{error}</p>
+      )}
+
+      {
+
+}
+      {!loading && stationsError && !stations?.length && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="text-sm text-amber-600">
+            Couldn&apos;t load the station list - {stationsError}
+          </p>
+          <Button onClick={refreshStations} className="mt-3" variant="secondary" size="sm">
+            Retry
+          </Button>
+        </div>
+      )}
+      {!loading && journeyError && (
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="text-sm text-amber-600">
+            Couldn&apos;t confirm whether you have an active journey - {journeyError}
+          </p>
+          <Button onClick={refreshJourney} className="mt-3" variant="secondary" size="sm">
+            Retry
+          </Button>
+        </div>
       )}
 
       {loading ? (

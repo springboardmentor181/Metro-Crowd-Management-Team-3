@@ -12,10 +12,13 @@ import {
   MessageSquare,
   Wrench,
   Info,
+  Radio,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { useApiData } from "@/hooks/useApiData";
+import { useLiveSocket } from "@/hooks/useLiveSocket";
+import { useLiveSocketContext } from "@/providers/LiveSocketProvider";
 import { useStations } from "@/hooks/useStations";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSelectedState } from "@/providers/StateProvider";
@@ -25,6 +28,7 @@ import {
   resolveAlert,
   getAlertNotifications,
 } from "@/lib/api/alerts";
+import { queryKeys } from "@/lib/queryKeys";
 import type { AlertType, NotificationLog } from "@/lib/api/types";
 
 const ALERT_TYPES: { value: AlertType; label: string }[] = [
@@ -50,9 +54,6 @@ function alertIcon(type: AlertType) {
   }
 }
 
-/** Small expandable panel showing per-recipient email + SMS delivery
- * status for one alert - fetched on demand so the Alerts page doesn't
- * hit this endpoint for every alert on every load. */
 function DeliveryStatus({ alertId }: { alertId: number }) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<NotificationLog[] | null>(null);
@@ -175,12 +176,28 @@ export default function AlertsManager() {
   const { selectedState } = useSelectedState();
 
   const [activeOnly, setActiveOnly] = useState(true);
+  const { isConnected } = useLiveSocketContext();
+  
   const alerts = useApiData(
-    () => getAlerts(activeOnly, selectedState ?? undefined),
+    queryKeys.alerts,
+    (signal) => getAlerts(activeOnly, selectedState ?? undefined, signal),
     [activeOnly, selectedState],
+    isConnected ? 0 : 30000,
   );
   const { data: stations } = useStations();
   const stationById = new Map((stations ?? []).map((s) => [s.id, s]));
+
+  const [connected, setConnected] = useState(false);
+  useLiveSocket({
+    station_alert: () => {
+      setConnected(true);
+      alerts.refresh();
+    },
+    delay_alert: () => {
+      setConnected(true);
+      alerts.refresh();
+    },
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -191,6 +208,7 @@ export default function AlertsManager() {
   const [message, setMessage] = useState("");
   const [notifyEmail, setNotifyEmail] = useState(true);
   const [notifySms, setNotifySms] = useState(true);
+  const [availableUntil, setAvailableUntil] = useState("");
 
   const [resolvingId, setResolvingId] = useState<number | null>(null);
 
@@ -210,10 +228,14 @@ export default function AlertsManager() {
         message: message.trim(),
         notify_email: notifyEmail,
         notify_sms: notifySms,
+        available_until: availableUntil
+          ? new Date(availableUntil).toISOString()
+          : null,
       });
       setMessage("");
       setStationId("");
       setAlertType("info");
+      setAvailableUntil("");
       const channels = [
         notifyEmail ? "email" : null,
         notifySms ? "SMS" : null,
@@ -236,9 +258,15 @@ export default function AlertsManager() {
 
   async function handleResolve(id: number) {
     setResolvingId(id);
+    setFormSuccess(null);
     try {
-      await resolveAlert(id);
+      const resolved = await resolveAlert(id);
       alerts.refresh();
+      setFormSuccess(
+        resolved.notify_email || resolved.notify_sms
+          ? "Alert marked resolved. A resolution notice is being sent now to the same audience."
+          : "Alert marked resolved.",
+      );
     } finally {
       setResolvingId(null);
     }
@@ -256,6 +284,13 @@ export default function AlertsManager() {
         </div>
 
         <div className="flex items-center gap-3">
+          {connected && (
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-500">
+              <Radio size={12} className="animate-pulse" />
+              Live
+            </span>
+          )}
+
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
@@ -331,6 +366,22 @@ export default function AlertsManager() {
               placeholder="e.g. Platform 2 closed for maintenance until 6 PM."
               className="w-full rounded-xl border border-border bg-card p-4 text-sm outline-none focus:border-primary"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">
+              Service expected back by <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={availableUntil}
+              onChange={(e) => setAvailableUntil(e.target.value)}
+              className="h-12 w-full rounded-xl border border-border bg-card px-4 text-sm outline-none focus:border-primary sm:w-72"
+            />
+            <p className="text-xs text-muted">
+              Shown to users as &quot;expected back by&quot; on the alert and in the
+              email/SMS. Leave blank if there is no known time yet.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-4">
@@ -411,6 +462,13 @@ export default function AlertsManager() {
                           Resolved
                         </span>
                       )}
+                      {!alert.is_resolved && alert.available_until && (
+                        <span className="alert-available-badge">
+                          <Clock3 size={11} />
+                          Expected back by{" "}
+                          {new Date(alert.available_until).toLocaleString()}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-2 text-sm text-muted">{alert.message}</p>
                     <p className="mt-1 text-xs text-muted">
@@ -422,19 +480,26 @@ export default function AlertsManager() {
                 </div>
 
                 {canManage && !alert.is_resolved && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleResolve(alert.id)}
-                    disabled={resolvingId === alert.id}
-                  >
-                    {resolvingId === alert.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <CheckCircle2 size={14} />
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleResolve(alert.id)}
+                      disabled={resolvingId === alert.id}
+                    >
+                      {resolvingId === alert.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={14} />
+                      )}
+                      Resolve
+                    </Button>
+                    {(alert.notify_email || alert.notify_sms) && (
+                      <span className="text-right text-[10px] text-muted">
+                        Notifies users again on resolve
+                      </span>
                     )}
-                    Resolve
-                  </Button>
+                  </div>
                 )}
               </div>
             ))}

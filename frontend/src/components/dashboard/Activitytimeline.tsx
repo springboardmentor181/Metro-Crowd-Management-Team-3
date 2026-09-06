@@ -1,4 +1,3 @@
-// src/components/dashboard/ActivityTimeline.tsx
 
 "use client";
 
@@ -12,9 +11,12 @@ import {
 } from "lucide-react";
 
 import { useApiData } from "@/hooks/useApiData";
+import { useLiveSocket } from "@/hooks/useLiveSocket";
+import { useLiveSocketContext } from "@/providers/LiveSocketProvider";
 import { getPredictionInsights } from "@/lib/api/analytics";
 import { useStations } from "@/hooks/useStations";
 import { useSelectedState } from "@/providers/StateProvider";
+import { queryKeys } from "@/lib/queryKeys";
 import type { Prediction, PredictionType } from "@/lib/api/types";
 
 function relativeTime(iso: string | null) {
@@ -71,13 +73,26 @@ function titleFor(type: PredictionType) {
   }
 }
 
+const FALLBACK_POLL_MS = 30000;
+
 export default function ActivityTimeline() {
   const { selectedState } = useSelectedState();
-  const { data: predictions, loading } = useApiData(
-    () => getPredictionInsights(15, selectedState ?? undefined),
+  const { isConnected } = useLiveSocketContext();
+  const predictionsQuery = useApiData(
+    queryKeys.predictionInsights,
+    (signal) => getPredictionInsights(15, selectedState ?? undefined, signal),
     [selectedState],
+    
+    isConnected ? 0 : FALLBACK_POLL_MS,
   );
+  const { data: predictions, loading } = predictionsQuery;
   const { data: stations } = useStations();
+
+  useLiveSocket({
+    crowd_update: () => predictionsQuery.refresh(),
+    delay_alert: () => predictionsQuery.refresh(),
+    station_alert: () => predictionsQuery.refresh(),
+  });
 
   const stationById = new Map((stations ?? []).map((s) => [s.id, s]));
 

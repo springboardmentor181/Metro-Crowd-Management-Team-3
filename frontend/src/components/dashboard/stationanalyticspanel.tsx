@@ -1,11 +1,14 @@
-// src/components/dashboard/StationAnalyticsPanel.tsx
 
 "use client";
 
 import { ArrowDownRight, ArrowUpRight, BarChart3, Gauge } from "lucide-react";
 
 import { useApiData } from "@/hooks/useApiData";
+import { useLiveSocket } from "@/hooks/useLiveSocket";
+import { useLiveSocketContext } from "@/providers/LiveSocketProvider";
 import { getInflowOutflow, getStationAnalytics } from "@/lib/api/crowd";
+import { queryKeys } from "@/lib/queryKeys";
+import type { InflowOutflow, StationAnalytics } from "@/lib/api/types";
 
 interface Props {
   stationId: number | null;
@@ -13,14 +16,38 @@ interface Props {
 }
 
 export default function StationAnalyticsPanel({ stationId, stationName }: Props) {
-  const { data: analytics, loading: analyticsLoading } = useApiData(
-    () => getStationAnalytics(stationId as number),
+  const { isConnected } = useLiveSocketContext();
+
+  const hasStation = stationId !== null;
+  const analyticsQuery = useApiData<StationAnalytics | null>(
+    queryKeys.stationAnalytics,
+    (signal) =>
+      stationId === null
+        ? Promise.resolve(null)
+        : getStationAnalytics(stationId, signal),
     [stationId],
+    !hasStation || isConnected ? 0 : 30000,
   );
-  const { data: flow, loading: flowLoading } = useApiData(
-    () => getInflowOutflow(stationId as number, 24),
+  const flowQuery = useApiData<InflowOutflow | null>(
+    queryKeys.inflowOutflow,
+    (signal) =>
+      stationId === null
+        ? Promise.resolve(null)
+        : getInflowOutflow(stationId, 24, signal),
     [stationId],
+    !hasStation || isConnected ? 0 : 30000,
   );
+  const { data: analytics, loading: analyticsLoading } = analyticsQuery;
+  const { data: flow, loading: flowLoading } = flowQuery;
+
+  useLiveSocket({
+    crowd_update: (payload) => {
+      if (payload.updates.some((u) => u.station_id === stationId)) {
+        analyticsQuery.refresh();
+        flowQuery.refresh();
+      }
+    },
+  });
 
   if (stationId === null) return null;
 

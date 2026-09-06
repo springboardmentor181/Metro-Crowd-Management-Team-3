@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -11,8 +11,12 @@ import {
   YAxis,
 } from "recharts";
 
-import { useStations } from "@/hooks/useStations";
-import { getTrafficPattern } from "@/lib/api/predictions";
+import { Button } from "@/components/ui/Button";
+import { useApiData } from "@/hooks/useApiData";
+import { useLiveSocket } from "@/hooks/useLiveSocket";
+import { getAggregateTrafficPattern } from "@/lib/api/predictions";
+import { queryKeys } from "@/lib/queryKeys";
+import { useSelectedState } from "@/providers/StateProvider";
 
 interface HourPoint {
   hour: string;
@@ -20,42 +24,33 @@ interface HourPoint {
 }
 
 export default function PassengerChart() {
-  const { data: stations, loading: stationsLoading } = useStations();
-  const [data, setData] = useState<HourPoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { selectedState } = useSelectedState();
 
-  useEffect(() => {
-    if (!stations || stations.length === 0) return;
+  const forecast = useApiData(
+    queryKeys.trafficPattern,
+    (signal) => getAggregateTrafficPattern(selectedState ?? undefined, signal),
+    [selectedState],
+    60000,
+  );
 
-    let cancelled = false;
+  useLiveSocket({
+    crowd_update: () => forecast.refresh(),
+    delay_alert: () => forecast.refresh(),
+  });
 
-    Promise.all(stations.map((s) => getTrafficPattern(s.id)))
-      .then((patterns) => {
-        if (cancelled) return;
+  const data: HourPoint[] = useMemo(() => {
+    if (!forecast.data) return [];
+    return forecast.data.hourly_forecast
+      .slice()
+      .sort((a, b) => a.hour - b.hour)
+      .map((point) => ({
+        hour: `${point.hour.toString().padStart(2, "0")}:00`,
+        passengers: point.predicted_count,
+      }));
+  }, [forecast.data]);
 
-        const totals = new Array(24).fill(0);
-        patterns.forEach((pattern) => {
-          pattern.hourly_forecast.forEach((point) => {
-            totals[point.hour] += point.predicted_count;
-          });
-        });
-
-        setData(
-          totals.map((value, hour) => ({
-            hour: `${hour.toString().padStart(2, "0")}:00`,
-            passengers: value,
-          })),
-        );
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [stations]);
-
-  const isLoading = stationsLoading || loading;
+  const showError = forecast.error && data.length === 0;
+  const showLoading = forecast.loading && data.length === 0 && !showError;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 sm:p-7">
@@ -79,7 +74,16 @@ export default function PassengerChart() {
 
       </div>
 
-      {isLoading ? (
+      {showError ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-16 text-center">
+          <p className="text-sm text-muted">
+            Couldn&apos;t load the forecast right now - the prediction service may be slow or unreachable.
+          </p>
+          <Button onClick={forecast.refresh} variant="secondary" size="sm">
+            Retry
+          </Button>
+        </div>
+      ) : showLoading ? (
         <p className="text-sm text-muted">Loading forecast...</p>
       ) : (
       <ResponsiveContainer width="100%" height={360}>
@@ -120,25 +124,25 @@ export default function PassengerChart() {
 
           <CartesianGrid
             strokeDasharray="4 4"
-            stroke="#374151"
+            stroke="var(--border)"
           />
 
           <XAxis
             dataKey="hour"
-            stroke="#94A3B8"
+            stroke="var(--muted)"
             tickLine={false}
             axisLine={{
-              stroke: "#94A3B8",
+              stroke: "var(--muted)",
             }}
           />
 
           <YAxis
-            stroke="#94A3B8"
+            stroke="var(--muted)"
             width={92}
             tickMargin={12}
             tickLine={false}
             axisLine={{
-              stroke: "#94A3B8",
+              stroke: "var(--muted)",
             }}
             allowDecimals={false}
             tickFormatter={(value) =>
@@ -151,12 +155,12 @@ export default function PassengerChart() {
 
           <Tooltip
             contentStyle={{
-              background: "#111827",
-              border: "1px solid #1F2937",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
               borderRadius: "16px",
             }}
             labelStyle={{
-              color: "#fff",
+              color: "var(--ink)",
             }}
           />
 
