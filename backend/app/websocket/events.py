@@ -1,0 +1,9 @@
+
+CROWD_UPDATE = "crowd_update"
+SCHEDULE_UPDATE = "schedule_update"
+DELAY_ALERT = "delay_alert"
+STATION_ALERT = "station_alert"
+TRAIN_POSITION = "train_position"
+NOTIFICATION = "notification"
+NOTIFICATION_READ = "notification_read"
+NOTIFICATION_ALL_READ = "notification_all_read"
