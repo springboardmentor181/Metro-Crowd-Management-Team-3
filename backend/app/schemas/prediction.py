@@ -23,13 +23,6 @@ class PredictionResponse(BaseModel):
     predicted_value: float
     target_datetime: datetime | None = None
     model_version: str | None = None
-    # Per-candidate breakdown (currently "random_forest" and "xgboost"
-    # keys), same pattern as CrowdModelMetrics.models - lets a caller
-    # show both models side by side instead of only the winner that
-    # the flat fields above mirror. Shape varies by prediction_type
-    # (e.g. predicted_delay_minutes for delay,
-    # recommended_frequency_minutes for frequency), so this is kept
-    # loosely typed here rather than duplicating a schema per type.
     models: dict[str, dict] = {}
     model_config = ConfigDict(
         from_attributes=True

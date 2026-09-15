@@ -1,0 +1,14 @@
+name: AI MetroFlow - Local
+values:
+  - key: base_url
+    value: 'http://127.0.0.1:8000'
+  - key: supabase_url
+    value: 'https://YOUR-PROJECT-REF.supabase.co'
+  - key: supabase_anon_key
+    value: 'YOUR_SUPABASE_ANON_KEY'
+  - key: supabase_email
+    value: 'you@example.com'
+  - key: supabase_password
+    value: 'YOUR_LOCAL_TEST_PASSWORD'
+  - key: access_token
+    value: ''

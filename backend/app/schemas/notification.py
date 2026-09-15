@@ -15,8 +15,12 @@ class NotificationResponse(BaseModel):
     related_alert_id: int | None
     state: str | None = None
     is_read: bool
+    binned_at: datetime | None = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 class NotificationUnreadCount(BaseModel):
     unread: int
+
+class NotificationDeleteCount(BaseModel):
+    deleted: int

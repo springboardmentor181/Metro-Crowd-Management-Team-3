@@ -1,5 +1,4 @@
 
-
 const COOKIE_NAME = "mock_auth_email";
 
 export const isAuthDisabled = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";

@@ -1,14 +1,26 @@
-import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabasePublishableKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-if (!url || !key) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
-  );
-}
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl && supabasePublishableKey,
+);
 
-export function createClient(): SupabaseClient {
-  return createSupabaseClient(url, key);
+let browserClient: SupabaseClient | undefined;
+
+export function createClient() {
+  if (!supabaseUrl || !supabasePublishableKey) {
+    throw new Error(
+      "Supabase is not configured. Add the Supabase URL and publishable key to .env.local, then restart the app.",
+    );
+  }
+
+  if (!browserClient) {
+    browserClient = createBrowserClient(supabaseUrl, supabasePublishableKey);
+  }
+
+  return browserClient;
 }
