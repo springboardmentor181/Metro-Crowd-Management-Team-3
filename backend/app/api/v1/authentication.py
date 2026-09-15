@@ -16,10 +16,7 @@ router = APIRouter(
     tags=["Authentication"]
 )
 
-# The frontend calls GET /auth/me on every app load, not just a true
-# sign-in - so "notify on every /me call" would fire on every page
-# refresh. This cooldown makes it behave like a real "welcome back"
-# ping instead: once per window per user, even across many page loads.
+
 LOGIN_NOTIFICATION_COOLDOWN_SECONDS = 6 * 60 * 60
 
 def _maybe_notify_login(db: Session, user: UserProfile) -> None:

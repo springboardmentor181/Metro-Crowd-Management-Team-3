@@ -90,9 +90,7 @@ async def get_logs(
 async def system_status(
     current_user: UserProfile = Depends(require_roles(UserRole.ADMIN, UserRole.OPERATOR)),
 ):
-    """One combined snapshot for a System Status screen: DB, cache,
-    background workers, and live socket connections - all read live
-    from the running process, not cached/mocked."""
+
     db_ok = True
     try:
         with engine.connect() as conn:

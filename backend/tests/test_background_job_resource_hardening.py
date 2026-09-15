@@ -1,25 +1,4 @@
-"""Render Free 512MB fix: prevent duplicate/unbounded background jobs.
 
-This file adds the regression coverage that was missing around the
-existing background-job lifecycle machinery
-(`app/simulator/leader_election.py`, `app/simulator/scheduler.py`,
-`app/websocket/manager.py`'s reaper, `app/core/notification_executor.py`).
-Almost all of the required guarantees (idempotent start, bounded
-crash-restart via the election poll interval, no `create_task` inside
-any loop body, a single bounded notification worker pool) were already
-in place from prior work - see docs/background-jobs-and-leader-election.md.
-The one real gap this file's fix addresses is `ConnectionManager.
-start_reaper()`, which used to only check "does a task object exist"
-instead of "is it still running", unlike every other loop's start()
-guard - see `test_reaper_restarts_after_a_crash_instead_of_staying_dead`
-below for the direct regression test.
-
-None of these tests spin up real Redis/Postgres - they exercise the
-same in-process objects `app/main.py`'s lifespan wires together,
-using the same fakes/monkeypatch style as
-tests/test_simulator_scheduler_intervals.py and
-tests/test_leader_election.py.
-"""
 
 import asyncio
 
@@ -32,12 +11,6 @@ from app.simulator.leader_election import LeaderElection
 from app.websocket.manager import ConnectionManager
 
 
-# ---------------------------------------------------------------------
-# 1. Idempotent start for the two jobs test_simulator_scheduler_
-#    intervals.py doesn't already cover (crowd retention / notification
-#    bin retention) - mirrors that file's pattern exactly for the
-#    simulator/tracker.
-# ---------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
 def _reset_scheduler_globals(monkeypatch):
@@ -88,13 +61,6 @@ def test_start_notification_bin_retention_job_is_idempotent_once_already_started
     assert scheduler._notification_bin_retention_election is first_election
 
 
-# ---------------------------------------------------------------------
-# 2. Calling the full startup sequence twice (all four scheduler jobs +
-#    the WebSocket relay/reaper) never creates a duplicate of anything.
-#    This is the direct test for requirement "calling startup twice
-#    does not create duplicate workers", exercised across every job
-#    app/main.py's lifespan starts, not just one of them in isolation.
-# ---------------------------------------------------------------------
 
 def test_calling_all_four_scheduler_starts_twice_creates_no_duplicates(monkeypatch, fake_leader_election):
     monkeypatch.setattr(scheduler, "_crowd_election", None)
@@ -193,10 +159,6 @@ def test_reaper_restarts_after_a_crash_instead_of_staying_dead():
     asyncio.run(scenario())
 
 
-# ---------------------------------------------------------------------
-# 3. Recurring loops do not accumulate asyncio tasks across many
-#    election ticks, and cancellation/shutdown terminates cleanly.
-# ---------------------------------------------------------------------
 
 def test_election_tick_does_not_accumulate_worker_tasks_across_many_ticks(monkeypatch):
     """Repeatedly calling _election_tick() (as the real _election_loop
@@ -287,10 +249,6 @@ def test_worker_crash_does_not_respawn_until_the_next_election_tick(monkeypatch)
             election = LeaderElection("bounded_restart_test", crashing_loop)
             await election._election_tick()
 
-            # Await the worker task directly so _on_worker_done() (added
-            # via add_done_callback at task-creation time, before this
-            # await's own internal completion callback) is guaranteed to
-            # have already run by the time we inspect its effects below.
             worker_task = election._worker_task
             assert worker_task is not None
             with pytest.raises(RuntimeError):
@@ -315,10 +273,6 @@ def test_worker_crash_does_not_respawn_until_the_next_election_tick(monkeypatch)
     asyncio.run(scenario())
 
 
-# ---------------------------------------------------------------------
-# 4. Notification dispatch worker pool: count unchanged, shutdown is
-#    safe to call more than once.
-# ---------------------------------------------------------------------
 
 def test_notification_dispatch_worker_count_matches_configured_setting():
     """Fix must not increase NOTIFICATION_DISPATCH_WORKERS - the pool is

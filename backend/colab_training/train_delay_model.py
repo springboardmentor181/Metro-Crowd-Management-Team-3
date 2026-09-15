@@ -1,30 +1,4 @@
-"""Milestone 2 - AI Prediction Module: delay prediction model training.
 
-Trains on the REAL 2nd-generation dataset (train_operations.csv.gz
-joined with trains.csv.gz for real per-train capacity_passengers and
-train_age_days), using the exact station_id/train integer mapping
-app/database/seed_real_data.py assigns (see _real_dataset_builder.py).
-
-8 features - the extra 2 (capacity_passengers, train_age_days) are
-real per-train values, never invented, matching what
-app/ai_engine/prediction/delay_predictor.py reads from the DB
-(Train.capacity, Train.commissioned_date) at inference time. Feature
-names match delay_predictor.py exactly, so no naming-mismatch shim is
-needed on the inference side.
-
-Trains BOTH RandomForest and XGBoost candidates and picks whichever had
-the lower held-out MAE (see `train()` below) - but the saved
-production bundle stores ONLY that winning estimator (`model` +
-`model_name`), not the losing candidate, to keep the shipped .pkl and
-its in-memory footprint down to a single trained model.
-
-Standalone script - meant to be run in Google Colab (see
-train_metroflow_models_colab.ipynb in this same folder), or locally
-with `python colab_training/train_delay_model.py` from the backend repo root if you
-prefer. It has NO dependency on the `app` package - it never runs as
-part of `uvicorn app.main:app`, so it never costs you CPU just from
-running the backend.
-"""
 import os
 
 import joblib

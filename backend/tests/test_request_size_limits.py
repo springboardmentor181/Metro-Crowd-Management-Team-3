@@ -1,9 +1,4 @@
-"""Request/upload size protection - see app/core/request_limits.py.
 
-FastAPI/Starlette impose no request-body size limit by default; these
-tests cover the new MaxBodySizeMiddleware that adds one, configured via
-settings.MAX_REQUEST_BODY_BYTES (env var MAX_REQUEST_BODY_BYTES).
-"""
 import asyncio
 
 import pytest
@@ -19,10 +14,7 @@ def client():
     return TestClient(app)
 
 
-# ---------------------------------------------------------------------
-# 1. Normal requests are accepted (the size check doesn't interfere
-#    with anything else - auth/validation still run as before).
-# ---------------------------------------------------------------------
+
 
 def test_normal_small_request_is_not_rejected_for_size(client):
     """A small, ordinary request must sail through the size check -
@@ -49,10 +41,7 @@ def test_normal_get_request_is_unaffected(client):
     assert r.status_code in (200, 429)
 
 
-# ---------------------------------------------------------------------
-# 2. Oversized requests are rejected cleanly (fast path: a declared
-#    Content-Length over the limit).
-# ---------------------------------------------------------------------
+
 
 def test_oversized_request_with_content_length_is_rejected_with_413(client):
     oversized = b'{"messages":[{"role":"user","content":"' + b"a" * (settings.MAX_REQUEST_BODY_BYTES + 1) + b'"}]}'
@@ -69,26 +58,13 @@ def test_oversized_request_with_content_length_is_rejected_with_413(client):
 def test_request_just_under_the_limit_is_not_rejected_for_size(client):
     """Confirms the limit isn't arbitrarily tighter than configured -
     a body just under MAX_REQUEST_BODY_BYTES must not get a 413."""
-    # Comfortably valid JSON, sized close to (but under) the limit via
-    # a padding field the schema ignores... schemas here reject unknown
-    # fields, so instead keep the body under a much smaller, obviously
-    # size-check-independent threshold and rely on the middleware unit
-    # tests below (which construct exact byte counts directly) for the
-    # precise boundary.
+
     r = client.post(
         "/api/v1/chatbot/message",
         json={"messages": [{"role": "user", "content": "hello there"}]},
     )
     assert r.status_code != 413
 
-
-# ---------------------------------------------------------------------
-# 3 & 3'. Oversized uploads/bodies are rejected WITHOUT the framework
-#    ever receiving (let alone buffering) the full payload - exercised
-#    directly at the ASGI layer, which is the only place this can
-#    actually be observed (once past the middleware, everything is a
-#    normal in-memory Python object regardless of how it got there).
-# ---------------------------------------------------------------------
 
 def _make_recording_app():
     received = {"bytes": 0, "calls": 0}
@@ -214,10 +190,7 @@ def test_websocket_scope_is_passed_through_untouched():
     assert calls == ["websocket"]
 
 
-# ---------------------------------------------------------------------
-# 4. Configuration is environment-variable driven, with a conservative
-#    production default.
-# ---------------------------------------------------------------------
+
 
 def test_max_request_body_bytes_is_env_driven_with_a_conservative_default():
     from app.core.config import Settings

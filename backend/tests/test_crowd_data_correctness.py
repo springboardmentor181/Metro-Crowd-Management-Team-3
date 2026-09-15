@@ -7,10 +7,7 @@ from app.enums.crowd_level import CrowdLevel
 from app.schemas.crowd_log import CrowdLogCreate
 from app.simulator import csv_replay_simulator as sim
 
-# Real rows: station STN-AMD-RL-01, 2026-01-01, every hour the station
-# was open that day - copied byte-for-byte from
-# datasets/passenger_flow.csv.gz (see docs/crowd-data-correctness.md for the
-# extraction command).
+
 STATION_CODE = "STN-AMD-RL-01"
 REAL_DAY_ROWS = [
     ("2026-01-01 05:00:00", 96, 106, 0.080, "Low"),
@@ -33,8 +30,7 @@ REAL_DAY_ROWS = [
     ("2026-01-01 22:00:00", 173, 161, 0.144, "Low"),
 ]
 
-# Hand-verified (see docs/crowd-data-correctness.md) running
-# max(0, occupancy + entries - exits) over REAL_DAY_ROWS in order.
+
 EXPECTED_OCCUPANCY_SEQUENCE = [0, 6, 6, 9, 0, 0, 0, 0, 0, 2, 7, 15, 18, 22, 0, 15, 10, 22]
 
 

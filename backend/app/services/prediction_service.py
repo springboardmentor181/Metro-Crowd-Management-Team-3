@@ -25,10 +25,7 @@ DEFAULT_CAPACITY_FALLBACK = 2400
 MAX_DEMAND_FORECAST_HOURS_AHEAD = 168
 
 def _cached_prediction(cache_key: str, compute: Callable[[], dict]) -> dict:
-    """Redis-first wrapper around a `predict_*`/`recommend_*` call.
-    Fail-open like the rest of the app's caching (app/core/cache.py):
-    a cache miss or a down Redis just falls through to actually
-    running the model, same result either way, just slower."""
+
     cached = cache.get_json(cache_key)
     if cached is not None:
         if cached.get("target_datetime"):

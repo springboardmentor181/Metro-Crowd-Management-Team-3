@@ -1,25 +1,4 @@
-"""Tests for the production ML-metrics CSV memory fix.
 
-crowd_metrics.py, delay_metrics.py and frequency_metrics.py used to
-pull the entire passenger_flow.csv.gz / train_operations.csv.gz file
-(every column, every row) into a single pandas DataFrame on every
-cold cache miss. These tests confirm:
-
-1. passenger_flow.csv.gz is read with a reduced column set and in
-   bounded chunks (never one big in-memory read of the full file).
-2. train_operations.csv.gz is read with a reduced column set and in
-   bounded chunks.
-3. The columns each metric actually needs are still present/correct.
-4. The aggregated/derived table each function returns is unchanged in
-   shape and columns (API response compatibility).
-5. The values are logically equivalent to the original single-shot
-   pd.read_csv(...) + groupby implementation.
-6. The full compute_*_metrics() endpoints still produce the same
-   response shape end-to-end (with a stubbed model, since the real
-   .pkl model is out of scope for this fix).
-7. The simulator's own chunked CSV reader (csv_replay_simulator.py) is
-   untouched and its existing tests still pass.
-"""
 import gzip
 from unittest.mock import patch
 

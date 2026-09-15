@@ -65,12 +65,7 @@ def check_in(db: Session, user_id: str, source_station_id: int, destination_stat
     try:
         db.commit()
     except IntegrityError:
-        # Belt-and-braces for the check-then-insert race above: two
-        # simultaneous requests can both pass the active_journey_for_user()
-        # check before either commits. The DB's partial unique index
-        # (ux_journeys_one_active_per_user, one ACTIVE row per user_id)
-        # lets exactly one of them win; the loser lands here instead of
-        # creating a second ACTIVE journey.
+
         db.rollback()
         raise HTTPException(status_code=400, detail="You already have an active journey - check out first")
     db.refresh(journey)
@@ -104,20 +99,6 @@ def check_out(db: Session, user_id: str, journey_id: int) -> Journey:
     journey.fare = fare
     journey.status = JourneyStatus.COMPLETED
 
-    # A checkout is a passenger LEAVING source and ARRIVING at
-    # destination - both live counts must move, or destination
-    # stations never reflect anyone who actually traveled there via
-    # check-in/check-out (only the simulator's own CSV-replay
-    # passengers would ever touch destination counts). Verified as a
-    # real gap: this previously only staged the -1 at source and
-    # never touched destination at all.
-    #
-    # Lock the two stations' rows in a fixed order (ascending id)
-    # rather than source-then-destination: apply_live_state_delta
-    # takes a row lock per station, and locking in travel order would
-    # deadlock two concurrent checkouts going opposite directions
-    # between the same pair of stations (A->B locks A then waits on
-    # B, while B->A locks B then waits on A, at the same time).
     deltas = {source.id: -1, destination.id: +1}
     results = {}
     for station in sorted((source, destination), key=lambda s: s.id):

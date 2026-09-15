@@ -305,18 +305,7 @@ def mark_all_read(db: Session, current_user: UserProfile) -> int:
     return updated
 
 def delete_notification(db: Session, notification_id: int, current_user: UserProfile) -> None:
-    """The per-card delete button: moves a single notification straight
-    to the Bin instead of waiting for a "mark all as read" sweep to get
-    to it - same destination (list_binned_notifications), just
-    triggered per-item and immediately. It's still recoverable for
-    NOTIFICATION_BIN_RETENTION_HOURS from there, same as anything else
-    in the Bin; only "Delete All" (delete_all_notifications) is
-    permanent right away. Same broadcast-or-mine ownership check as
-    mark_read/mark_all_read. A personal row gets its own `binned_at`
-    stamped (only this user ever owns it, so that's already per-user).
-    A broadcast row (user_id NULL) is never altered directly - this
-    records a per-user `binned_at` overlay instead, so it moves to the
-    Bin for this user only and every other user's copy is untouched."""
+
     notification = db.get(Notification, notification_id)
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -341,16 +330,6 @@ def delete_notification(db: Session, notification_id: int, current_user: UserPro
     )
 
 def delete_all_notifications(db: Session, current_user: UserProfile) -> int:
-    """Removes every notification visible to this user - both
-    whatever's currently in the Inbox and anything already sitting in
-    the Bin - not just one page of it. Deliberately not scoped by the
-    7-day retention cutoff or binned_at the way _notifications_query
-    is: "Delete All" is meant to actually clear everything the user
-    can see, not just what a filtered list would currently return.
-    Personal rows are hard-deleted (one bulk DELETE, only this user
-    ever owns them). Broadcast rows are never removed - each gets a
-    per-user `deleted_at` overlay instead, same as delete_notification,
-    so this only clears the current user's own view."""
     personal_deleted = (
         db.query(Notification)
         .filter(Notification.user_id == current_user.id)
@@ -412,26 +391,7 @@ def create_notification(
     related_alert_id: int | None = None,
     state: str | None = None,
 ) -> Notification:
-    """Fire-and-forget helper used by other services (alert_service,
-    news_service, and app/main.py's failure handlers) to drop a row
-    into the bell feed. Broadcast (user_id=None) unless a specific
-    user is given.
 
-    `state` (e.g. "West Bengal") ties a broadcast row to one region -
-    callers that know which station/city this is about should resolve
-    it via app/utils/geo.py::state_for_city and pass it through, so
-    the frontend only surfaces it to users who have that state
-    selected. Leave it None for anything that isn't region-specific
-    (system announcements, login notices, failures) - those still
-    reach everyone.
-
-    After committing, also pushes the same row over the live socket
-    (as a "notification" event) so an open tab gets it instantly
-    instead of waiting for the next 30s poll: broadcast to everyone if
-    user_id is None, or targeted at just that user's connection(s)
-    otherwise. Push-on-top-of-pull - an offline/disconnected recipient
-    still sees it next time they load or poll the feed, since the row
-    is already committed."""
     notification = Notification(
         user_id=user_id,
         source=source,

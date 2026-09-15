@@ -1,25 +1,4 @@
-"""Render Free 512MB fix: prevent excessive/unbounded application logging.
 
-Covers the two real gaps found in the audit for this pass - everything
-else already logged at the right frequency/level (verified by reading,
-not by adding redundant tests for code that was already correct):
-
-1. `app/core/log_buffer.py`'s `install()` raises the ROOT logger to
-   INFO so the admin log-buffer captures useful app records. Side
-   effect: any third-party logger with no level of its own (httpx,
-   used internally by google-genai for every chatbot call) used to
-   inherit that INFO level instead of Python's normal WARNING default,
-   turning on one "HTTP Request: ..." log line per outbound call that
-   was previously silent. Fixed by explicitly pinning httpx/httpcore
-   back to WARNING inside install().
-
-2. `app/services/notification_dispatch_queue.py`'s
-   `recover_pending_jobs()` used to log one `logger.warning()` per
-   resumed job in a loop - a per-record log in a startup recovery
-   pass that could replay an unbounded number of times after a crash
-   with a large backlog. Fixed by collapsing to one aggregate WARNING
-   line (job IDs capped) regardless of how many jobs are resumed.
-"""
 import logging
 
 import pytest

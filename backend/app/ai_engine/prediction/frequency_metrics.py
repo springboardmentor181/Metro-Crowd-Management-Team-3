@@ -31,21 +31,7 @@ DISPLAY_NAMES = {
 }
 
 def _station_id_map() -> dict[str, int]:
-    """Same cleaning/ordering as colab_training/_real_dataset_builder.py
-    ::_station_id_map and app/database/seed_real_data.py (which assigns
-    the real DB station.id the exact same way), kept in sync manually
-    so training and evaluation never drift apart.
-
-    Bug fix: this used to ignore the dataset's own `station_id` column
-    and invent a fresh 1..N numbering by sorting stations by (city,
-    line, station_name), joining passenger_flow back on a (city,
-    station_name) key. That numbering never matched the row-order
-    numbering the training builder/seeder actually assign, so every
-    evaluation row got a scrambled station_id relative to what the
-    model was trained on - see crowd_metrics.py for the full writeup
-    of the same bug there. Mapping the native station_id string
-    directly fixes it here too.
-    """
+    
     stations = pd.read_csv(STATIONS_CSV)
     for col in ["station_id", "city", "line", "station_name"]:
         stations[col] = stations[col].astype(str).str.strip()
@@ -56,16 +42,7 @@ def _station_id_map() -> dict[str, int]:
     return dict(zip(stations["station_id"], stations["int_station_id"]))
 
 def _crowd_table(station_id_map: dict) -> pd.DataFrame:
-    """MEMORY FIX: streams passenger_flow.csv.gz in bounded
-    CSV_CHUNK_SIZE-row chunks (only PASSENGER_FLOW_USECOLS columns)
-    and reduces each chunk to a partial sum/count per (station_id,
-    hour, day_of_week, is_weekend, is_peak_hour) group immediately,
-    instead of materializing the whole file as one DataFrame. The
-    partial sums are combined and divided once at the end (mean =
-    sum/count, rounded to int) in the same sorted group-key order a
-    single-shot groupby(...).mean() would produce, so the result is
-    unchanged - only one CSV_CHUNK_SIZE-row chunk plus these small
-    running per-group totals are ever resident in memory at once."""
+    
     partial_group_sums: list[pd.DataFrame] = []
     group_keys = ["station_id", "hour", "day_of_week", "is_weekend", "is_peak_hour"]
 

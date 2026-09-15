@@ -36,30 +36,7 @@ engine = create_engine(
 
 @event.listens_for(engine, "handle_error")
 def _record_db_failure(context):
-    """PostgreSQL failure metric (see app/core/metrics.py). SQLAlchemy
-    fires this ConnectionEvents.handle_error event for any error
-    raised by the DBAPI (psycopg2) during a connection or cursor
-    operation - a dropped/refused connection, an auth failure, a
-    statement-timeout cancellation, a constraint violation, etc. This
-    is the single place that covers all of them, without threading a
-    metrics call through every individual `except Exception` in the
-    codebase that happens to be catching a DB error.
-
-    Deliberately does NOT cover a connection-pool checkout timeout
-    (sqlalchemy.exc.TimeoutError, DB_POOL_TIMEOUT exceeded): that's
-    SQLAlchemy's own pool giving up before it ever attempts a DBAPI
-    connection, so this event never fires for it - see
-    app/main.py's db_pool_exhausted_handler, which records that case
-    separately under reason="pool_exhausted".
-
-    Only the exception's CLASS NAME is used as the metric label -
-    never str()/repr() of the exception itself, which for a connection
-    failure can contain the DSN (host, port, database name, sometimes
-    the username). Returning None (the implicit result of not
-    returning context.chained_exception) leaves SQLAlchemy's own error
-    handling/propagation completely untouched - this listener only
-    observes, it never suppresses or replaces the original error.
-    """
+    
     reason = type(context.original_exception).__name__
     try:
         metrics.record_db_failure(reason)
@@ -73,16 +50,7 @@ _cluster_ceiling = _per_process_ceiling * settings.WEB_CONCURRENCY
 
 
 def _fetch_postgres_max_connections() -> int | None:
-    """Read the server's REAL `max_connections`, via a single ad-hoc,
-    short-timeout connection made and closed immediately - deliberately
-    NOT through `engine`/the pool above, so this startup check can
-    never itself consume a pool slot or be affected by pool sizing.
-    Returns None (never raises) if Postgres can't be reached right now
-    - a dev box without Postgres running yet, or a container-startup
-    race - so this check degrades to "unverified", not "app won't
-    boot", when the problem is availability rather than a genuine
-    sizing mistake.
-    """
+    
     if not settings.DATABASE_URL.startswith("postgresql"):
         return None
     conn = None
@@ -115,17 +83,7 @@ def check_pool_capacity(
     reserve: int,
     max_connections: int,
 ) -> tuple[int, int]:
-    """Pure arithmetic, no I/O - kept separate from
-    `_verify_pool_capacity_or_raise` below so this check's actual logic
-    can be unit-tested (tests/test_db_pool_capacity.py) without needing
-    a real Postgres connection or psycopg2 in the test environment.
-
-    Returns `(cluster_ceiling, safe_capacity)` if the configuration is
-    safe. Raises `RuntimeError` (never anything more exotic - a plain,
-    catchable, clearly-worded error) if `(pool_size + max_overflow) *
-    web_concurrency` - the most connections every worker process could
-    simultaneously hold open - would exceed `max_connections - reserve`.
-    """
+    
     cluster_ceiling = (pool_size + max_overflow) * web_concurrency
     safe_capacity = max_connections - reserve
     if cluster_ceiling > safe_capacity:

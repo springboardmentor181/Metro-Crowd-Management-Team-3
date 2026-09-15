@@ -47,9 +47,7 @@ def passenger_flow_overview(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """Passenger inflow/outflow KPIs, top stations by inflow, and
-    ridership-by-line - powers the Analytics page's KPI cards and the
-    "Passenger Flow by Station" / "Ridership by Line" widgets."""
+
     return analytics_service.passenger_flow_overview(db, hours, state, top_n)
 
 @router.get("/prediction-insights", response_model=list[PredictionResponse])

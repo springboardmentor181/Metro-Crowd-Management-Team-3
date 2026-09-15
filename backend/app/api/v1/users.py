@@ -32,9 +32,7 @@ def get_users(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(require_roles(UserRole.ADMIN)),
 ):
-    """Every real user profile - excludes the simulator's virtual
-    passenger pool (see app/simulator/live_simulator.py), which would
-    otherwise clutter this list with 40+ "Simulated Passenger" rows."""
+
     limit = _clamp(limit, DEFAULT_USERS_LIMIT, MAX_USERS_LIMIT)
     offset = max(offset or 0, 0)
     return (

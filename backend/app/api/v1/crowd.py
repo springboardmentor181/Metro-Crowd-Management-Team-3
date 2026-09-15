@@ -30,12 +30,7 @@ def crowd_heatmap(
     limit: int | None = None,
     db: Session = Depends(get_db),
 ):
-    """Crowd heatmap generation (station coordinates + density).
 
-    Pass ?limit=20 to get only the 20 busiest stations (by current
-    occupancy) instead of every station - used by the dashboard's
-    "Top 20" filter toggle.
-    """
     return crowd_service.get_heatmap(db, state, limit)
 
 @router.get("/congestion")
@@ -53,11 +48,7 @@ def station_monitor(
     hours: int = 1,
     db: Session = Depends(get_db),
 ):
-    """Live Station Monitor feed for the dashboard: every active
-    station's density + a short-window passenger in/out delta,
-    busiest first. `state` scopes it to one city/state - pass the
-    currently selected city so the widget only shows that city's
-    stations."""
+
     return crowd_service.get_station_monitor(db, state, hours)
 
 

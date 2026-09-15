@@ -149,26 +149,7 @@ def set_json(key: str, value: Any, ttl_seconds: int | None = None) -> None:
         _mark_down(exc)
 
 def set_nx(key: str, ttl_seconds: int) -> bool:
-    """Atomically set `key` to a sentinel value with an expiry, but only
-    if it doesn't already exist (Redis `SET key val NX EX ttl`).
-
-    Returns True if this call won the race (the key was absent and is
-    now set - the caller should proceed with whatever it's guarding),
-    or False if the key was already present (someone else already did
-    that work recently - the caller should skip it).
-
-    This is a *write* dedupe guard, distinct from get_json/set_json's
-    *value* cache above - e.g. "don't insert another DB row for this
-    station for the next N seconds" rather than "don't recompute this
-    value for the next N seconds" (added for prediction_service's
-    smart_recommendations() write-storm fix - Phase 1, P2-3).
-
-    Fails OPEN (returns True) on a disabled/unreachable Redis, same
-    fail-open philosophy as the rest of this module: a down cache never
-    blocks the underlying write, it just loses the de-dup optimization
-    for the duration of the outage - identical to write behaviour
-    before this helper existed.
-    """
+    
     client = _get_client()
     if client is None:
         return True

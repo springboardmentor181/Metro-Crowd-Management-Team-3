@@ -46,10 +46,6 @@ async def run_forever(session_factory, interval_seconds: int | None = None) -> N
                 exc,
                 exc_info=exc,
             )
-            # Explicit rollback before close - see csv_replay_simulator.
-            # py's run_forever / retention.py's run_forever for why: a
-            # failed delete+commit must not leave anything half-applied
-            # on the session before it goes back to the pool.
             db.rollback()
         finally:
             db.close()

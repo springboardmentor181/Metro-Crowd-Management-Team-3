@@ -148,8 +148,6 @@ def _track_tick_sync(db: Session, tick_seconds: int) -> list[dict]:
 async def track_tick(db: Session, interval_seconds: int) -> list[dict]:
     updates = await asyncio.to_thread(_track_tick_sync, db, interval_seconds)
     if updates:
-        # Phase 4: broadcast_everywhere() - see csv_replay_simulator.py's
-        # replay_tick() for why (same reasoning applies to this loop).
         await manager.broadcast_everywhere(
             TRAIN_POSITION,
             {"updates": updates, "timestamp": datetime.now(timezone.utc).isoformat()},
@@ -163,8 +161,6 @@ async def run_forever(session_factory, interval_seconds: int = 60) -> None:
             await track_tick(db, interval_seconds)
         except Exception as exc:                
             print(f"[train_simulator] tick failed, will retry next interval: {exc}")
-            # Phase 6: explicit rollback before close - see
-            # csv_replay_simulator.py's run_forever for why.
             db.rollback()
         finally:
             db.close()

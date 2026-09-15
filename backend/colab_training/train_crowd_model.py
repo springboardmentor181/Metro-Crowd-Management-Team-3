@@ -1,27 +1,4 @@
-"""Milestone 2 - AI Prediction Module: crowd prediction model training.
 
-Trains on the REAL 2nd-generation dataset (stations.csv.gz,
-passenger_flow.csv.gz), using the exact station_id integer mapping
-app/database/seed_real_data.py assigns (see _real_dataset_builder.py),
-so a model trained here lines up with the station_id values seeded
-into Postgres.
-
-Trains BOTH RandomForest and XGBoost candidates and picks whichever had
-the lower held-out MAE (see `train()` below) as `model`/`model_name`,
-but the saved bundle also keeps BOTH fitted candidates under
-`models: {"random_forest": ..., "xgboost": ...}` so the dashboard can
-show both predictions side by side (see predict_crowd's docstring in
-app/ai_engine/prediction/crowd_predictor.py, and
-app/ai_engine/model_bundle.py's AI_MODEL_LIGHT_MODE for how that's
-trimmed back to one model on memory-constrained deployments).
-
-Standalone script - meant to be run in Google Colab (see
-train_metroflow_models_colab.ipynb in this same folder), or locally
-with `python colab_training/train_crowd_model.py` from the backend repo root if you
-prefer. It has NO dependency on the `app` package - it never runs as
-part of `uvicorn app.main:app`, so it never costs you CPU just from
-running the backend.
-"""
 import os
 
 import joblib

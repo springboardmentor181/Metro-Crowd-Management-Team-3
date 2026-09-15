@@ -17,19 +17,7 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "saved_models", "crow
 DATASET_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "datasets", "source")
 STATIONS_CSV = os.path.join(DATASET_DIR, "stations.csv.gz")
 PASSENGER_FLOW_CSV = os.path.join(DATASET_DIR, "passenger_flow.csv.gz")
-# Gzipped to stay under GitHub's 100MB file limit - pd.read_csv infers
-# the compression from the ".gz" extension, no other change needed.
 
-# MEMORY FIX: passenger_flow.csv.gz is a large production dataset (16
-# columns, ~800k rows). This module only ever needs the 7 columns
-# below, and only ever needs them reduced to a small per-(station,
-# hour, day_of_week, is_weekend, is_peak_hour) aggregate - so a plain
-# pd.read_csv(PASSENGER_FLOW_CSV) (all columns, every row materialized
-# at once) was pulling the entire wide file into RAM on every cold
-# cache miss. Read only these columns, and read them in bounded
-# chunks (see CSV_CHUNK_SIZE) that get reduced to small partial
-# aggregates immediately, so only one chunk's worth of raw rows is
-# ever resident at a time.
 PASSENGER_FLOW_USECOLS = [
     "station_id", "hour", "day_of_week", "is_weekend", "entries", "exits", "crowding_index",
 ]
@@ -50,24 +38,7 @@ def _bucket(ratio: float) -> str:
     return "critical"
 
 def _station_id_map() -> dict[str, int]:
-    """Same cleaning/ordering as colab_training/_real_dataset_builder.py
-    ::_station_id_map (and app/database/seed_real_data.py, which assigns
-    the real DB station.id the exact same way) - kept in sync manually
-    so training and evaluation never drift apart.
-
-    Bug fix: this used to ignore the dataset's own `station_id` column
-    (e.g. "STN-DEL-YL-01") entirely and invent a fresh 1..N numbering by
-    sorting stations by (city, line, station_name), then join
-    passenger_flow.csv back on a (city, station_name) key. That
-    numbering never matched the row-order numbering
-    _real_dataset_builder.py/seed_real_data.py actually assign (no
-    sort, drop_duplicates on the native station_id string, index+1) -
-    so every evaluation row got a scrambled station_id relative to what
-    the model was trained on, which is what made a genuinely reasonable
-    model (~470 MAE / ~48% MAPE at training time) score as R2=-0.63 /
-    MAPE=1243% here. Mapping the native station_id string directly -
-    exactly like the two files above - fixes that drift.
-    """
+    
     stations = pd.read_csv(STATIONS_CSV)
     for col in ["station_id", "city", "line", "station_name"]:
         stations[col] = stations[col].astype(str).str.strip()
@@ -78,30 +49,7 @@ def _station_id_map() -> dict[str, int]:
     return dict(zip(stations["station_id"], stations["int_station_id"]))
 
 def _passenger_flow_aggregates(station_id_map: dict) -> tuple[pd.DataFrame, float]:
-    """Streams passenger_flow.csv.gz in bounded chunks (CSV_CHUNK_SIZE
-    rows at a time, only PASSENGER_FLOW_USECOLS columns) and reduces
-    each chunk immediately to the two things compute_crowd_metrics()
-    actually needs:
-
-    1. `grouped` - the mean passenger_count per (station_id, hour,
-       day_of_week, is_weekend, is_peak_hour), i.e. exactly what
-       raw.groupby(FEATURES)["passenger_count"].mean()...reset_index()
-       produced before. Built incrementally via a per-chunk sum/count,
-       combined across chunks, then divided once at the end - same
-       arithmetic (mean = sum/count, rounded to int) and same sorted
-       group-key order as the original single-shot groupby, so the
-       resulting table (and therefore the train_test_split(random_state=42)
-       held-out rows built from it) is unchanged.
-    2. `implied_capacity` - the median of passenger_count/crowding_index
-       over rows with crowding_index > 0.05. Computing an exact median
-       still requires seeing every qualifying value, but only that one
-       float column is accumulated across chunks (not the whole
-       DataFrame), which is a small fraction of the file's memory
-       footprint.
-
-    Only ever holds one CSV_CHUNK_SIZE-row chunk plus these small
-    running aggregates in memory - never the full dataset.
-    """
+    
     partial_group_sums: list[pd.DataFrame] = []
     capacity_ratio_chunks: list[np.ndarray] = []
 
@@ -245,9 +193,7 @@ def compute_crowd_metrics() -> dict:
 
     try:
         model_features = bundle.get("features", FEATURES)
-        # Evaluate every saved candidate (random_forest, xgboost), not
-        # just the winner - falls back to the single `model` key for
-        # any older .pkl trained before both were saved.
+        
         trained_name = bundle.get("model_name", "random_forest")
         candidates = bundle.get("models") or {trained_name: bundle["model"]}
 
@@ -269,19 +215,7 @@ def compute_crowd_metrics() -> dict:
             evaluated["model_name"] = DISPLAY_NAMES.get(name, name)
             models_out[name] = evaluated
 
-        # Bug fix: `trained_name` is whatever colab_training picked as the
-        # winner using ITS OWN dataset build/test split at training time.
-        # models_out above is a fresh, independent re-evaluation (this
-        # module's own dataset build + train_test_split(random_state=42)) -
-        # normally identical, but the two can disagree (different data
-        # snapshot since training, a chunked-vs-single-shot aggregation
-        # rounding difference, etc). Trusting the stale `trained_name` in
-        # that case shows an "Active" badge on a candidate whose own MAE/R2
-        # displayed right next to it is visibly worse than the other card -
-        # exactly the mismatch this fixes. Pick the winner from the live
-        # numbers actually being displayed instead, so the badge always
-        # matches what's on screen; still fall back to `trained_name` (then
-        # the first candidate) if MAE is missing for every candidate.
+        
         scored = [(name, m) for name, m in models_out.items() if m.get("mae") is not None]
         if scored:
             winner_name, best = min(scored, key=lambda item: item[1]["mae"])
