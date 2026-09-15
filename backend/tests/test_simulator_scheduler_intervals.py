@@ -1,27 +1,3 @@
-"""Render Free resource-usage fix: the simulator and train-tracker stay
-ENABLED (the dashboard needs continuously replayed passenger-flow data
-and live train status), but both background loops tick every 60s
-instead of the old 10s config default / 5s scheduler default. The
-already-correct 60s crowd-history cadence is untouched.
-
-These tests cover, in order:
-1. ENABLE_SIMULATOR defaults to True.
-2. ENABLE_TRAIN_TRACKING defaults to True.
-3. Configured simulator interval (app.core.config.settings) is 60s.
-4. Configured train tracker interval is 60s.
-5. app/main.py's lifespan actually passes those configured intervals
-   through to scheduler.start_simulator/start_train_tracker at startup
-   - there's no hidden 5s/10s default silently overriding them.
-6. No 5-second or 10-second default remains anywhere in the
-   simulator/tracker call chain (scheduler defaults + the underlying
-   run_forever defaults in csv_replay_simulator/train_simulator).
-7. Existing simulator functionality still works (start is idempotent,
-   configured/default intervals both thread through correctly).
-8. Existing train tracking functionality still works (same, for the
-   train tracker loop).
-9. CROWD_HISTORY_INTERVAL_SECONDS (retention/history cadence) remains
-   60s.
-"""
 
 import asyncio
 import functools

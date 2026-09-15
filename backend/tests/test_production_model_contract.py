@@ -1,31 +1,4 @@
-"""Tests for the production model integration fix (Sept 2026 retrain).
 
-The new crowd_model.pkl / delay_model.pkl / frequency_model.pkl
-artifacts each ship ONLY their single winning model (no `models` dict
-of multiple candidates, unlike older bundles) - see
-app/ai_engine/model_bundle.py's module docstring. These tests confirm:
-
-1. Each of the 3 real .pkl files under app/ai_engine/saved_models/
-   loads successfully via the shared model_bundle loader.
-2. Each loads at most once per process (shared registry).
-3. Each bundle's `features` list is exactly the order each predictor
-   expects - see KNOWN_FEATURES / the hardcoded column lists in
-   crowd_predictor.py, delay_predictor.py, frequency_predictor.py.
-4. model_bundle.validate_feature_contract() correctly accepts the real
-   feature lists and rejects an unrecognized feature name.
-5. Loading a model bundle never reads the large source CSV datasets
-   (passenger_flow.csv.gz / train_operations.csv.gz) - those are only
-   ever read by the separate *_metrics.py dashboard-evaluation path,
-   never by the prediction hot path.
-6. AI_EAGER_WARMUP / AI_MODEL_LIGHT_MODE / WEB_CONCURRENCY keep their
-   Render-Free-safe defaults.
-
-Requires the pinned runtime dependencies (scikit-learn==1.8.0,
-xgboost==2.1.3, joblib==1.5.3 - see requirements.txt) to actually
-unpickle the real artifacts; run this inside the project's normal
-dev/CI environment (or the Docker build), not a bare interpreter
-missing those packages.
-"""
 import os
 
 import pandas as pd

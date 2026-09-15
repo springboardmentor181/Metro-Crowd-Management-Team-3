@@ -88,9 +88,7 @@ def update_train(db: Session, train_id: int, payload: TrainUpdate) -> Train:
     db.commit()
     db.refresh(train)
     _invalidate_train_position_cache()
-    # BUGFIX (remaining N+1 query - see delay_predictor.py's
-    # _fleet_stats): capacity/commissioned_date/is_active are all
-    # inputs to the cached fleet-wide average - see create_train above.
+
     invalidate_fleet_stats_cache()
     return train
 

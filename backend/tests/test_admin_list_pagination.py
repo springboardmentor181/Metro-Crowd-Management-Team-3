@@ -9,15 +9,7 @@ from app.services import enquiry_service, schedule_service
 # --- schedule_service.list_schedules / peak_hour_schedules / delayed_schedules ---
 
 def _schedule_query_chain(db: MagicMock):
-    """The mock object list_schedules/peak_hour_schedules/delayed_schedules
-    chain .offset()/.limit() onto - i.e. db.query(...).filter(...)... up
-    to .order_by(...). Since these three build the filter chain slightly
-    differently, we just stub every attribute access to return the same
-    chained mock (a MagicMock does this by default), then anchor on
-    `.order_by.return_value` explicitly. Cache is bypassed via `cache.get_json`
-    returning None (Redis unreachable / no-op default), so every call here
-    falls through to `_compute()` and actually exercises the query builder.
-    """
+
     return db.query.return_value.filter.return_value.order_by.return_value
 
 

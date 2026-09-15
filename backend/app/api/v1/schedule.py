@@ -65,9 +65,7 @@ def delayed_schedules_count(
     state: str | None = None,
     db: Session = Depends(get_db),
 ):
-    """Lightweight counterpart to /delayed - total count of currently
-    delayed schedules (same filters), for the dashboard's Recent Alerts
-    widget, which only needs the number rather than the capped list."""
+
     return {"count": schedule_service.delayed_schedules_count(db, station_id, state)}
 
 @router.get("/upcoming")
@@ -77,9 +75,7 @@ def upcoming_schedules(
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
-    """Feed for the dashboard's "Upcoming Train Schedule" widget - next
-    departures with train, line, from/to stations and live status.
-    `state` scopes to one city, `status` filters to on_time/delayed."""
+
     return schedule_service.get_upcoming_schedules(db, state, status, limit)
 
 @router.get("/{schedule_id}", response_model=TrainScheduleResponse)

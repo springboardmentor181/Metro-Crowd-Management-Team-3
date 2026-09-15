@@ -19,8 +19,7 @@ MAX_FREQUENCY = 15
 KNOWN_FEATURES = {"station_id", "hour", "day_of_week", "is_weekend", "is_peak_hour"}
 
 def _load_model():
-    # See crowd_predictor._load_model - same shared, thread-safe,
-    # load-once registry (app.ai_engine.model_bundle.get_or_load).
+
     return model_bundle.get_or_load("frequency", MODEL_PATH)
 
 def recommend_frequency(station_id: int, target_datetime: datetime | None = None) -> dict:

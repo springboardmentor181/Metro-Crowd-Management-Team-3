@@ -1,12 +1,4 @@
-"""Diagnostic: how many train_schedules rows exist per city, and for
-today's day_type. Run this to check whether "No departures found for
-<city>" is a real data-coverage gap (seed data has no schedule rows
-for that city's stations) vs a bug.
 
-    cd backend
-    venv\\Scripts\\activate      (Windows)   or   source venv/bin/activate
-    python -m app.database.diagnose_schedule_coverage
-"""
 from collections import Counter
 
 from sqlalchemy import func
@@ -43,17 +35,7 @@ def run():
         for city, day_type, count in rows:
             by_city.setdefault(city, Counter())[day_type.value] = count
 
-        # BUGFIX (naive datetime / timezone handling): this used to
-        # resolve against the naive server-local clock, then (in a
-        # follow-up fix) against raw UTC - both of which can disagree
-        # with the actual day_type filter /schedules/upcoming applies
-        # (see schedule_service.py::_current_day_type()), the former
-        # depending on what timezone the machine running this
-        # diagnostic happens to be in, the latter because schedule
-        # rows are keyed on local business time, not UTC. Resolved
-        # against the same business timezone as _current_day_type()
-        # here too, so this diagnostic can never report a different
-        # "today" than the API it's meant to be diagnosing.
+       
         today_day_type = DayType.WEEKEND if business_now().weekday() >= 5 else DayType.WEEKDAY
         print(f"Today's day_type filter used by /schedules/upcoming: {today_day_type.value}\n")
 

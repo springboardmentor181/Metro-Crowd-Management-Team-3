@@ -1,16 +1,4 @@
-"""Regression coverage for the stations/trains list endpoints staying
-bounded at the service layer, independent of the FastAPI route's own
-`Query(..., ge=1, le=MAX_*_LIMIT)` validation (app/api/v1/station.py,
-app/api/v1/trains.py). The route-level Query bounds already reject an
-out-of-range `limit` with a 422 before it reaches the service, but the
-service functions (station_service.list_stations, train_service.
-list_trains) also clamp internally - same defense-in-depth pattern as
-every other list endpoint (alerts, notifications, schedules,
-enquiries, users, news; see test_pagination_limits.py and
-test_admin_list_pagination.py). This file adds the same style of
-direct, mocked-db regression test for the two list endpoints that
-weren't already covered by name.
-"""
+
 from unittest.mock import MagicMock
 
 from app.services import station_service

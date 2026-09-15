@@ -1,8 +1,4 @@
-"""Tests for the Render Free (512MB) production-model memory fix:
-AI_MODEL_LIGHT_MODE now defaults to True, and app.ai_engine.model_bundle
-prunes a loaded bundle down to just its winning model before it's ever
-cached - see app/core/config.py and app/ai_engine/model_bundle.py.
-"""
+
 from unittest.mock import MagicMock
 
 import numpy as np

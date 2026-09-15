@@ -1,14 +1,4 @@
-"""Validates the Docker/Render image-size fix WITHOUT needing a Docker
-daemon (none is available in CI/this sandbox): it (a) re-implements
-Docker's .dockerignore matching semantics closely enough to check which
-real files in the repo would/wouldn't be sent to the build context, and
-(b) statically inspects the Dockerfile for the required multi-stage
-structure and explicit COPY list.
 
-Pure stdlib - runs standalone (`python3 tests/test_docker_build_context.py`)
-as well as under pytest, so it doesn't depend on the project's runtime
-dependencies (fastapi/sqlalchemy/etc.) being installed.
-"""
 
 import fnmatch
 import os

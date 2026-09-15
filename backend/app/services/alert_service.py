@@ -119,15 +119,9 @@ def resolve_alert(db: Session, alert_id: int) -> tuple[Alert, bool]:
     just_resolved = result.rowcount == 1
 
     if not just_resolved:
-        # Nothing to commit or broadcast - a retried/duplicated request
-        # for an already-resolved alert must be a true no-op, exactly
-        # as documented above.
+
         return alert, False
 
-    # Reflect the flip on the in-memory object immediately rather than
-    # relying solely on db.refresh() to re-fetch it - the caller must
-    # see just_resolved=True paired with an alert whose is_resolved is
-    # already True.
     alert.is_resolved = True
     alert.resolved_at = resolved_at
 

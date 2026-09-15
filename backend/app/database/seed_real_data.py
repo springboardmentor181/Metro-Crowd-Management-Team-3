@@ -203,10 +203,6 @@ def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
             subset=["station_id", "city", "line", "station_name", "latitude", "longitude"]
         )
 
-        # OOM fix: streams passenger_flow.csv.gz in bounded chunks
-        # instead of loading it whole - see
-        # _derive_station_capacities_chunked() for the equivalence
-        # note.
         capacities = _derive_station_capacities_chunked(raw["passenger_flow_path"])
 
         station_rows: dict[str, Station] = {}
@@ -342,9 +338,6 @@ def seed(dataset_dir: str = DEFAULT_DATASET_DIR, reset: bool = False) -> None:
                     print(f"  train_schedule_history: {history_inserted}/{total_ops_rows - dropped} inserted...", end="\r")
                     history_dicts = []
 
-                # 2. Canonical timetable slot - keep whichever
-                # occurrence has the chronologically latest
-                # scheduled_arrival for this slot (see note above).
                 slot_key = (train.id, db_station.id, day_type)
                 if slot_key not in timetable_slot_arrival or arrival_dt >= timetable_slot_arrival[slot_key]:
                     timetable_slot_arrival[slot_key] = arrival_dt

@@ -109,12 +109,7 @@ def _election_metrics_snapshot(name: str, election: LeaderElection | None) -> di
     return election.get_metrics_snapshot()
 
 def scheduler_metrics_snapshot() -> list[dict]:
-    """Per-loop leader/heartbeat snapshots for app/core/metrics.py's
-    simulator collector - the metrics-shaped counterpart to
-    scheduler_status() above. Each entry always carries the loop's own
-    `name` (rather than requiring the caller to already know the four
-    fixed loop names), so a not-yet-started loop still yields a zeroed
-    row instead of being silently omitted."""
+    
     return [
         _election_metrics_snapshot("crowd_simulator", _crowd_election),
         _election_metrics_snapshot("train_tracker", _train_election),
@@ -125,14 +120,7 @@ def scheduler_metrics_snapshot() -> list[dict]:
     ]
 
 def scheduler_status() -> dict:
-    """Structured snapshot of all three background loops - consumed by
-    the /health endpoint so external liveness/monitoring checks can see
-    at a glance whether either loop has silently died, and by
-    /admin/simulator for the same detail in the admin UI. `state` is
-    now one of "not_started" | "leader" | "standby" | "crashed" - a
-    process reporting "standby" is healthy and expected in a
-    multi-worker deployment: it means another process is holding
-    leadership for that loop, not that anything is broken."""
+    
     return {
         "crowd_simulator": _election_status(_crowd_election),
         "train_tracker": _election_status(_train_election),

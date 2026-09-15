@@ -1,23 +1,4 @@
-"""DB connection/session lifecycle verification (Render Free leak audit).
 
-This file does not change any production code - the audit found every
-session/connection lifecycle path already safe (get_db()'s try/except/
-finally, every manual SessionLocal() already try/finally-closed, every
-background-job run_forever() loop already closing its session every
-tick - with rollback on exception - and every engine.connect() already
-context-managed). These tests exist to make that already-correct
-behaviour a regression-tested guarantee instead of an implicit one, per
-the audit's TASKS list:
-
-1. FastAPI DB dependency closes sessions.
-2/3. Background jobs release sessions after success / after exceptions.
-4/5. Simulator / train tracker release their session every tick.
-6. Retention jobs (crowd + notification-bin) close sessions.
-7. Notification workers (alert dispatch) release sessions even on
-   exception.
-8. No global/session cache is introduced.
-9. (Existing tests are left untouched by this file.)
-"""
 from __future__ import annotations
 
 import asyncio

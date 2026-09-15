@@ -1,21 +1,4 @@
-"""
-2nd-generation real-data training table builder.
 
-Matches EXACTLY the ID-assignment logic in
-app/database/seed_real_data.py so that a model trained here lines up
-with the station_id / train internal-id values the deployed DB will
-actually have:
-  - station_id (int) = 1-based row position in stations.csv.gz after
-    the SAME drop_duplicates(subset=["station_id"]) + dropna(...) used
-    in seed_real_data.py (there were 0 dupes/NaNs in this dataset, so
-    it's a direct 1..N row-order mapping).
-  - train internal id (int) = 1-based row position in trains.csv.gz
-    (no filtering applied in seed_real_data.py either).
-
-Feature/column names match app/ai_engine/prediction/delay_predictor.py
-exactly: station_id, hour, day_of_week, is_weekend, is_peak_hour,
-passenger_count, capacity_passengers, train_age_days.
-"""
 import os
 from datetime import datetime
 
@@ -110,9 +93,7 @@ def build_delay_dataset() -> pd.DataFrame:
         on=["station_id", "hour", "day_of_week", "is_weekend", "is_peak_hour"],
         how="left",
     )
-    # A handful of (station, hour, day_of_week, is_weekend, is_peak_hour)
-    # combos in train_operations may have no matching passenger_flow rows;
-    # fall back to that station's overall average rather than dropping data.
+
     station_avg = crowd_table.groupby("station_id")["passenger_count"].mean()
     df["passenger_count"] = df["passenger_count"].fillna(df["station_id"].map(station_avg))
     df["passenger_count"] = df["passenger_count"].fillna(crowd_table["passenger_count"].mean())

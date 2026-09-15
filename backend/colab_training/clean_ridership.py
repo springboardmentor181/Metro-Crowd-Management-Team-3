@@ -1,11 +1,4 @@
-"""Preprocessing utilities for raw transportation/passenger datasets
-(smart-card, entry/exit, footfall, ridership) before feature engineering.
 
-Placeholder module - fill in with real cleaning logic (deduping,
-timezone normalization, outlier removal) once real datasets are
-connected. Milestone 2 uses the synthetic generator in
-app/ai_engine/datasets/generate_dataset.py instead.
-"""
 import pandas as pd
 
 def drop_invalid_rows(df: pd.DataFrame) -> pd.DataFrame:

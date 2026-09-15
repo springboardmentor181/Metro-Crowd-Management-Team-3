@@ -78,13 +78,6 @@ def resolve_alert(
 ):
     alert, just_resolved = alert_service.resolve_alert(db, alert_id)
 
-    # Phase 10: only dispatch on the call that actually resolved the
-    # alert. Gating on `notify_on_resolve` alone made this endpoint
-    # non-idempotent - a retried/duplicated PATCH (dropped response,
-    # double-click, client retry-on-timeout) for an already-resolved
-    # alert would re-send the resolution email/SMS/bell notification
-    # every time it was called. See alert_service.resolve_alert and
-    # docs/notification-delivery.md.
     if just_resolved and payload.notify_on_resolve:
         # Dedicated pool (Phase 8), via the durable queue (Phase 11) -
         # see create_alert above.
@@ -106,10 +99,5 @@ def get_alert_notifications(
     db: Session = Depends(get_db),
     current_user: UserProfile = Depends(require_roles(UserRole.ADMIN, UserRole.OPERATOR)),
 ):
-    """Per-recipient delivery status for this alert's email + SMS
-    dispatch - who was notified on which channel, who failed, and
-    why. `limit`/`offset` page through results (clamped server-side -
-    see alert_service.list_alert_notifications) since a single alert
-    sent to a large active-user base can generate one row per
-    (recipient, channel)."""
+
     return alert_service.list_alert_notifications(db, alert_id, limit, offset)

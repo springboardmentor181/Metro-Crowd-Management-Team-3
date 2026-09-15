@@ -47,10 +47,7 @@ def try_acquire(name: str, holder_id: str | None = None) -> bool:
             _fd, current_holder = held
             if current_holder == holder_id:
                 return True  # same logical holder re-polling - idempotent
-            # A differently-identified caller already thinks it holds
-            # this name in this process. Don't trust that - fall
-            # through and let a genuinely new flock() attempt on our
-            # own fd settle it for real (see docstring above).
+        
 
         path = _lock_path(name)
         try:
@@ -79,14 +76,6 @@ def try_acquire(name: str, holder_id: str | None = None) -> bool:
 
 
 def release(name: str, holder_id: str | None = None) -> None:
-    """Best-effort release, e.g. on graceful shutdown, so a standby
-    sibling process can take over immediately instead of waiting for
-    this process to exit. Safe to call even if `name` isn't held.
-
-    Only releases if `holder_id` matches whoever this process recorded
-    as the holder (same identity contract as `try_acquire` above) - a
-    caller that never actually won the lock can't release someone
-    else's."""
     with _state_lock:
         held = _held_fds.get(name)
         if held is None:
@@ -108,12 +97,6 @@ def release(name: str, holder_id: str | None = None) -> None:
 
 
 def is_held(name: str, holder_id: str | None = None) -> bool:
-    """True iff THIS process currently holds `name`'s local lock.
-
-    With `holder_id` given, scoped to that specific caller (matches
-    the identity contract above); without it, a broader "does ANY
-    caller in this process hold it" query, used only for
-    logging/status, never for granting exclusivity."""
     with _state_lock:
         held = _held_fds.get(name)
         if held is None:

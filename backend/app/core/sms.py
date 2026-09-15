@@ -33,9 +33,7 @@ def _is_transient_sms_error(exc: Exception) -> bool:
     if isinstance(exc, urllib.error.HTTPError):
         return exc.code == 429 or exc.code >= 500
     if isinstance(exc, urllib.error.URLError):
-        # Covers connection-refused/DNS/timeout - HTTPError is also a
-        # URLError subclass, so this branch only ever sees the
-        # non-HTTP cases (no response was received at all).
+
         return True
     return isinstance(exc, (TimeoutError, ConnectionError, OSError))
 
@@ -84,8 +82,7 @@ def send_alert_sms(
                 req.add_header("Content-Type", "application/x-www-form-urlencoded")
 
                 with urllib.request.urlopen(req, timeout=15) as resp:
-                    # urlopen raises HTTPError itself for any non-2xx
-                    # status, so reaching here means success.
+
                     results[recipient] = "sent"
                     last_exc = None
                 break

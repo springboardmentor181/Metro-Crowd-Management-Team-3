@@ -22,16 +22,7 @@ class Alert(TimestampMixin, Base):
 
     __tablename__ = "alerts"
 
-    # BUGFIX (slow alert queries at scale): this table had NO indexes
-    # beyond the primary key. alert_service.list_alerts() is hit on
-    # every dashboard alert-feed load - with no filter (ORDER BY
-    # created_at DESC), filtered by station_id, or filtered by
-    # is_resolved - and every one of those was a full Seq Scan.
-    # Measured on a 152k-row table (a few years of a busy multi-city
-    # deployment): default list 35ms -> 0.13ms, active_only filter
-    # 19.5ms -> 0.13ms, station_id filter 8.3ms -> 0.04ms after adding
-    # these three indexes (verified with EXPLAIN ANALYZE before/after,
-    # not added speculatively - see docs/query-performance-and-indexing.md).
+   
     __table_args__ = (
         Index("ix_alerts_created_at", "created_at"),
         Index("ix_alerts_station_id_created_at", "station_id", "created_at"),

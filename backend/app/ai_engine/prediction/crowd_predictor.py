@@ -13,20 +13,11 @@ logger = logging.getLogger(__name__)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "saved_models", "crowd_model.pkl")
 
-# Every raw input this predictor can actually compute for a
-# (station_id, target_datetime) pair - see the feature construction in
-# predict_crowd()/predict_crowd_bulk() below. Used to validate a loaded
-# bundle's `features` list before trusting its column order (see
-# model_bundle.validate_feature_contract).
+
 KNOWN_FEATURES = {"station_id", "hour", "day_of_week", "is_weekend", "is_peak_hour"}
 
 def _load_model():
-    # Thread-safe, load-once, lazy singleton shared via
-    # app.ai_engine.model_bundle's small fixed crowd/delay/frequency
-    # registry - see get_or_load() there for why a plain
-    # @lru_cache(maxsize=1) here wasn't enough to prevent two
-    # concurrent requests from both loading their own copy of the
-    # model on a cold cache.
+
     return model_bundle.get_or_load("crowd", MODEL_PATH)
 
 def _heuristic(hour: int, is_weekend: int) -> float:
@@ -40,21 +31,12 @@ def _heuristic(hour: int, is_weekend: int) -> float:
 def _predict_one(model, model_name: str, features: pd.DataFrame, light: bool) -> dict:
     """Run a single already-fitted model and shape its output the same
     way regardless of which algorithm it is."""
-    # Passenger counts can never be negative - a regression model can
-    # still extrapolate below zero for feature combos it saw little of
-    # during training (e.g. very late-night hours), so clamp here the
-    # same way delay_predictor/frequency_predictor already clamp their
-    # own outputs, instead of letting a negative count leak into the
-    # dashboards (aggregate sums of many negative per-station
-    # predictions is what made "Passenger Analytics" render upside
-    # down with negative totals).
+
     predicted_count = max(0.0, float(model.predict(features)[0]))
     if light:
         confidence = None
     elif hasattr(model, "estimators_"):
-        # Per-tree confidence only makes sense for a forest
-        # (RandomForest); XGBoost's boosted trees aren't independent
-        # votes, so there's no equivalent cheap per-tree spread here.
+
         tree_preds = [t.predict(features.values)[0] for t in model.estimators_]
         confidence = float(max(0.0, 1 - (np.std(tree_preds) / (np.mean(tree_preds) + 1e-6))))
     else:
@@ -70,29 +52,9 @@ def predict_crowd(
     target_datetime: datetime | None = None,
     light: bool = False,
 ) -> dict:
-    """light=True skips the per-tree confidence pass (walking every
-    tree in the RandomForest separately) and only returns
-    predicted_count. Used by the live simulator, which calls this once
-    per station every tick just to *weight* random check-ins and never
-    reads `confidence` at all - running the full forest-vote loop
-    there was pure wasted CPU that added up across every station on
-    every tick. The real /prediction/crowd API endpoint (where a user
-    actually sees confidence) still calls this with light=False.
-
-    Returns the winning (lowest-MAE-at-training-time) model's result at
-    the top level, same shape as before, PLUS a `models` dict with every
-    trained candidate's prediction (currently random_forest and
-    xgboost) so callers that want to show both side by side can, without
-    the winner-takes-all fallback logic needing to change."""
+    
     dt = target_datetime or datetime.now(timezone.utc)
-    # BUGFIX (naive datetime / timezone handling): `hour`/`day_of_week`
-    # used to be read straight off `dt`, which is UTC-aware for every
-    # "now" caller in this codebase - but "peak hour" (8-11am/5-8pm)
-    # and "weekend" are business-local concepts for the metro network
-    # being predicted, not UTC ones. `dt` itself (returned below as
-    # `target_datetime`) is left untouched - only the feature
-    # extraction is resolved against the business timezone. See
-    # app/utils/timezone.py.
+    
     local_dt = to_business_time(dt)
     hour = local_dt.hour
     day_of_week = local_dt.weekday()
@@ -116,18 +78,10 @@ def predict_crowd(
             all_candidates = bundle.get("models") or {trained_name: bundle["model"]}
 
             if light:
-                # Simulator hot path (called once per station every
-                # tick, never reads `models`) - only run the winning
-                # model, exactly like before this file supported dual
-                # predictions. Running both candidates here would
-                # silently double inference cost on every tick for a
-                # result nobody consumes.
+                
                 winner_model = all_candidates.get(trained_name) or next(iter(all_candidates.values()))
                 winner = _predict_one(winner_model, trained_name, features, light)
             else:
-                # Real user-facing prediction call - compute every
-                # candidate so the API/dashboard can show Random Forest
-                # and XGBoost side by side.
                 for name, model in all_candidates.items():
                     per_model[name] = _predict_one(model, name, features, light)
                 winner = per_model.get(trained_name) or next(iter(per_model.values()))
@@ -160,27 +114,7 @@ def predict_crowd(
     }
 
 def predict_crowd_bulk(station_ids: list[int], hours: list[int], target_date: datetime) -> dict[tuple[int, int], dict]:
-    """Vectorized version of predict_crowd(..., light=True) for many
-    (station_id, hour) pairs at once - one DataFrame, one model.predict()
-    call, instead of one Python-level call (and one pandas DataFrame
-    construction) per pair.
-
-    Built for all_stations_traffic_pattern(), which previously called
-    predict_crowd() individually for every station x every one of 24
-    hours in a plain Python for-loop - for a city with, say, 40
-    stations that's 960 separate model invocations built and run one
-    at a time on every cache-cold request, which is what made the
-    "Passenger Analytics" widget both slow to load and prone to timing
-    out entirely under load. scikit-learn's model.predict() is already
-    vectorized internally - it costs barely more to score 1000 rows in
-    one call than 10 - so batching turns 960 sequential Python-level
-    calls into 1.
-
-    Returns a dict keyed by (station_id, hour) with the same
-    predicted_count/confidence=None/model_version shape as an
-    individual light=True predict_crowd() call, so callers can swap
-    the loop for a single bulk call without changing anything
-    downstream."""
+    
     day_of_week = target_date.weekday()
     is_weekend = 1 if day_of_week in (5, 6) else 0
 
@@ -214,11 +148,7 @@ def predict_crowd_bulk(station_ids: list[int], hours: list[int], target_date: da
     trained_name = bundle.get("model_name", "random_forest") if bundle is not None else None
     for i, (station_id, hour) in enumerate(keys):
         if predicted is not None:
-            # Same non-negative clamp as _predict_one() above - this is
-            # the vectorized path all_stations_traffic_pattern() calls
-            # for every station x hour, so an unclamped negative value
-            # here is what was summing into a large negative total per
-            # hour on the "Passenger Analytics" (all stations) chart.
+
             predicted_count = max(0.0, float(predicted[i]))
             model_version = f"{trained_name}_v1"
         else:

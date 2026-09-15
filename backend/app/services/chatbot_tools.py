@@ -8,14 +8,10 @@ from app.models.train_schedule import TrainSchedule
 from app.services import alert_service, crowd_service, schedule_service, station_service
 from app.utils.timezone import business_now, business_today
 
-# How many upcoming departures to surface for a "next train" answer -
-# enough to also show the one after next without dumping the whole
-# day's timetable at the model.
+
 NEXT_TRAINS_LIMIT = 3
 
-# How many candidate names to offer back when a station name doesn't
-# match anything, so the assistant can ask "did you mean ...?"
-# instead of silently guessing.
+
 SUGGESTION_LIMIT = 5
 
 

@@ -60,36 +60,14 @@ def _mark(job_id: int, status: NotificationDispatchStatus, error: str | None = N
         db.close()
 
 def run_job(job_id: int) -> None:
-    """Runs on notification_executor's worker pool (submitted from
-    enqueue_and_submit, or resubmitted by recover_pending_jobs after a
-    restart).
 
-    Marks the job IN_PROGRESS - and records the attempt - BEFORE doing
-    any real work, so a hard process kill mid-send leaves an
-    IN_PROGRESS row (with `attempts` already reflecting this try) for
-    the next startup's recovery to find, rather than a row that looks
-    untouched. Then DONE or FAILED once the underlying dispatch call
-    returns or raises.
-
-    Re-runs the full dispatch (dispatch_alert_notifications /
-    dispatch_alert_resolution_notifications) rather than resuming
-    mid-recipient-list, but passes this job's own id through as
-    `job_id` so per-recipient idempotency (see
-    alert_service._dispatch) can skip anyone this exact job already
-    successfully sent to on an earlier, crashed attempt - a resumed
-    run can retry recipients that were never reached or that failed,
-    without re-sending to ones that already got the email/SMS. See the
-    module docstring on NotificationDispatchJob for the full
-    "why"."""
     db = SessionLocal()
     try:
         job = db.get(NotificationDispatchJob, job_id)
         if job is None:
             return
         if job.status == NotificationDispatchStatus.DONE:
-            # Already completed by an earlier attempt (e.g. recovery
-            # resubmitted it just as the original run was finishing) -
-            # never re-run a job that already succeeded.
+
             return
         job.status = NotificationDispatchStatus.IN_PROGRESS
         job.attempts += 1
@@ -119,15 +97,7 @@ def run_job(job_id: int) -> None:
         _mark(job_id, NotificationDispatchStatus.DONE)
 
 def recover_pending_jobs() -> int:
-    """Called once from app/main.py's lifespan, before the app starts
-    serving traffic. Finds every job a previous process left QUEUED or
-    IN_PROGRESS - this is a fresh startup, so by definition nothing is
-    currently working on either state - and resubmits it, unless
-    `attempts` already shows it's exhausted its
-    NOTIFICATION_DISPATCH_MAX_JOB_ATTEMPTS budget across restarts (a
-    job that deterministically crashes the process is marked
-    permanently FAILED instead of retried forever). Returns how many
-    jobs were resubmitted, for the startup log line."""
+
     db = SessionLocal()
     try:
         stuck = (
@@ -156,11 +126,7 @@ def recover_pending_jobs() -> int:
         db.close()
 
     if resumable_ids:
-        # One aggregate line instead of one logger.warning() per job -
-        # app/main.py's lifespan already logs the resumed count on its
-        # own line, so this only needs to add the actual IDs for
-        # debugging, capped so a large backlog after a crash can't turn
-        # startup into one log line per row.
+
         _MAX_IDS_LOGGED = 20
         shown = resumable_ids[:_MAX_IDS_LOGGED]
         suffix = (
