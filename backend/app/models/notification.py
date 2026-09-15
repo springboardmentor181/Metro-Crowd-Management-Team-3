@@ -1,6 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import Boolean
+from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
+from sqlalchemy import Index
 from sqlalchemy import String
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -16,6 +20,12 @@ from app.mixins.timestamp import TimestampMixin
 class Notification(TimestampMixin, Base):
 
     __tablename__ = "notifications"
+
+    
+    __table_args__ = (
+        Index("ix_notifications_created_at_is_read_user_id", "created_at", "is_read", "user_id"),
+        Index("ix_notifications_binned_at", "binned_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -41,16 +51,16 @@ class Notification(TimestampMixin, Base):
         ForeignKey("alerts.id"), nullable=True
     )
 
-    # Which state/region this notification is about (e.g. "West Bengal"
-    # for a Kolkata station), resolved from the station's city via
-    # app/utils/geo.py at creation time - NULL means "not tied to any
-    # one state" (system announcements, login notices, etc.) and is
-    # always shown regardless of the user's selected state filter.
-    # See app/services/notification_service.py::create_notification.
+    
     state: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     is_read: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
+    )
+
+    
+    binned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     user = relationship("UserProfile")

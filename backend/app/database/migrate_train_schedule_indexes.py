@@ -1,3 +1,4 @@
+
 from sqlalchemy import text
 
 from app.core.config import settings
@@ -7,6 +8,9 @@ INDEXES = [
     ("ix_train_schedules_station_id_day_type", "station_id, day_type"),
     ("ix_train_schedules_station_id_status", "station_id, status"),
     ("ix_train_schedules_train_id", "train_id"),
+    ("ix_train_schedules_is_peak_hour", "is_peak_hour"),
+    ("ix_train_schedules_delay_minutes", "delay_minutes"),
+    ("ix_train_schedules_status", "status"),
 ]
 
 def _masked_database_url() -> str:

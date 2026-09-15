@@ -24,6 +24,12 @@ class TrainSchedule(TimestampMixin, Base):
         Index("ix_train_schedules_station_id_day_type", "station_id", "day_type"),
         Index("ix_train_schedules_station_id_status", "station_id", "status"),
         Index("ix_train_schedules_train_id", "train_id"),
+        
+        Index("ix_train_schedules_is_peak_hour", "is_peak_hour"),
+        Index("ix_train_schedules_delay_minutes", "delay_minutes"),
+        Index("ix_train_schedules_status", "status"),
+       
+        Index("ix_train_schedules_day_type_departure_time", "day_type", "departure_time"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -42,6 +48,12 @@ class TrainSchedule(TimestampMixin, Base):
     arrival_time: Mapped[time]
     departure_time: Mapped[time]
     platform_number: Mapped[int]
+
+    
+    station_sequence: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
     day_type: Mapped[DayType] = mapped_column(
         Enum(DayType),

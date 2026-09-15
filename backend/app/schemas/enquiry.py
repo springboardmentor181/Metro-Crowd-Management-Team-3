@@ -14,6 +14,7 @@ class EnquiryCreate(BaseModel):
     message: str = Field(min_length=5, max_length=1000)
 
 class EnquiryResolve(BaseModel):
+
     admin_reply: str = Field(min_length=1, max_length=1000)
     status: EnquiryStatus = EnquiryStatus.RESOLVED
 
@@ -40,9 +41,6 @@ class EnquiryResponse(BaseModel):
 
 
 class EnquiryStats(BaseModel):
-    """Counts for the enquiry dashboard cards. Scoped exactly like
-    list_enquiries: staff get totals across everyone, a passenger
-    gets counts of only their own enquiries."""
     total: int
     open: int
     in_progress: int

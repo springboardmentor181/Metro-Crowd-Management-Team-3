@@ -1,69 +1,796 @@
 import Image from "next/image";
+import Link from "next/link";
 
-export default function Home() {
+import {
+  Activity,
+  ArrowRight,
+  BellRing,
+  BrainCircuit,
+  Clock3,
+  Gauge,
+  MapPin,
+  Route,
+  ShieldCheck,
+  Sparkles,
+  TrainFront,
+  Users,
+} from "lucide-react";
+
+import ThemeToggle from "@/components/layout/ThemeToggle";
+
+const capabilities = [
+  {
+    icon: Users,
+    number: "01",
+    title: "Live Crowd Intelligence",
+    text:
+      "Turn gates, ticketing, occupancy and station records into a real-time understanding of passenger movement.",
+
+    image: "/images/capability-crowd.jpg",
+
+    alt:
+      "Passenger crowd inside metro",
+  },
+
+  {
+    icon: BrainCircuit,
+    number: "02",
+    title: "Demand Forecasting",
+    text:
+      "Predict congestion before it happens using AI and historical travel behaviour.",
+
+    image: "/images/capability-forecast.jpg",
+
+    alt:
+      "Metro Platform",
+  },
+
+  {
+    icon: Route,
+    number: "03",
+    title: "Adaptive Scheduling",
+    text:
+      "Recommend train frequency based on passenger demand and operational intelligence.",
+
+    image: "/images/capability-schedule.jpg",
+
+    alt:
+      "Metro Train",
+  },
+
+  {
+    icon: BellRing,
+    number: "04",
+    title: "Passenger Alerts",
+    text:
+      "Notify commuters instantly about delays, emergencies and platform congestion.",
+
+    image: "/images/capability-alerts.jpg",
+
+    alt:
+      "Metro Station",
+  },
+];
+
+export default function HomePage() {
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+
+    <main className="site-shell">
+
+      <nav className="site-nav">
+
+        <Link
+          href="/"
+          className="brand"
+        >
+
+          <span className="brand-mark">
+
+            <TrainFront size={22} />
+
+          </span>
+
+          <span>
+
+            MetroFlow
+
+            <strong>
+
+              {" "}AI
+
+            </strong>
+
+          </span>
+
+        </Link>
+
+        <div className="nav-links">
+
+          <a href="#platform">
+
+            Platform
+
+          </a>
+
+          <a href="#passengers">
+
+            Passengers
+
+          </a>
+
+          <a href="#impact">
+
+            Impact
+
+          </a>
+
+        </div>
+
+        <div className="nav-actions">
+
+          <ThemeToggle />
+
+          <Link
+            href="/login"
+            className="text-button"
+          >
+
+            Sign In
+
+          </Link>
+
+          <Link
+            href="/signup"
+            className="primary-button"
+          >
+
+            Create Account
+
+            <ArrowRight size={16} />
+
+          </Link>
+
+        </div>
+
+      </nav>
+
+      <section className="home-hero">
+
+        <div className="hero-copy">
+
+          <span className="eyebrow">
+
+            <Sparkles size={15} />
+
+            Intelligence For Urban Movement
+
+          </span>
+
+          <h1>
+
+            A calmer commute
+
+            <em>
+
+              {" "}starts before
+
+            </em>
+
+            {" "}the crowd.
+
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p>
+
+            MetroFlow helps passengers travel with confidence
+            while helping metro operators predict congestion,
+            improve scheduling and deliver smarter journeys.
+
           </p>
+
+          <div className="hero-actions">
+
+            <Link
+              href="/signup"
+              className="primary-button large"
+            >
+
+              Passenger Signup
+
+              <ArrowRight size={18} />
+
+            </Link>
+
+            <Link
+              href="/login"
+              className="secondary-button large"
+            >
+
+              Operator Login
+
+            </Link>
+
+          </div>
+
+          <div className="trust-row">
+
+            <span>
+
+              <ShieldCheck size={17} />
+
+              Privacy Friendly AI
+
+            </span>
+
+            <span>
+
+              <Activity size={17} />
+
+              Live Crowd Prediction
+
+            </span>
+
+          </div>
+
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+
+        <div className="hero-visual">
+
+          <div className="image-frame hero-photo">
+
             <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+              src="/images/delhi-platform.jpg"
+              alt="Delhi Metro"
+              fill
+              priority
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+          </div>
+
+          <div className="floating-card crowd-card">
+
+            <span className="status-dot" />
+
+            <div>
+
+              <small>
+
+                Central Station
+
+              </small>
+
+              <strong>
+
+                Comfortable
+
+              </strong>
+
+            </div>
+
+            <b>
+
+              42%
+
+            </b>
+
+          </div>
+
+          <div className="floating-card arrival-card">
+
+            <Clock3 size={20} />
+
+            <div>
+
+              <small>
+
+                Next Train
+
+              </small>
+
+              <strong>
+
+                Arriving In 3 Min
+
+              </strong>
+
+            </div>
+
+          </div>
+
         </div>
-      </main>
-    </div>
+
+      </section>
+
+      <section className="network-strip">
+
+        <div>
+
+          <strong>
+
+            24/7
+
+          </strong>
+
+          <span>
+
+            Network Awareness
+
+          </span>
+
+        </div>
+
+        <div>
+
+          <strong>
+
+            60 Min
+
+          </strong>
+
+          <span>
+
+            Demand Forecast
+
+          </span>
+
+        </div>
+
+        <div>
+
+          <strong>
+
+            4 Signals
+
+          </strong>
+
+          <span>
+
+            Unified Intelligence
+
+          </span>
+
+        </div>
+
+        <div>
+
+          <strong>
+
+            0 Cameras
+
+          </strong>
+
+          <span>
+
+            Privacy Friendly AI
+
+          </span>
+
+        </div>
+
+      </section>
+
+      <section
+        className="story-section"
+        id="passengers"
+      >
+
+        <div className="story-images">
+
+          <div className="image-frame story-main">
+
+            <Image
+              src="/images/hyderabad-metro.jpg"
+              alt="Hyderabad Metro"
+              fill
+            />
+
+          </div>
+
+          <div className="image-frame story-small">
+
+            <Image
+              src="/images/kolkata-platform.jpg"
+              alt="Kolkata Metro"
+              fill
+            />
+
+          </div>
+
+          <span className="image-note">
+
+            <MapPin size={15} />
+
+            Built For India&apos;s Growing Metro Network
+
+          </span>
+
+        </div>
+
+        <div className="story-copy">
+
+          <span className="section-label">
+
+            For Every Journey
+
+          </span>
+
+          <h2>
+
+            Not just an operations platform.
+
+            <br />
+
+            A better experience for every passenger.
+
+          </h2>
+
+          <p>
+
+            MetroFlow AI allows passengers to
+            view live crowd levels, receive
+            disruption alerts and choose the
+            best departure time before leaving
+            home.
+
+          </p>
+
+          <ul className="check-list">
+
+            <li>
+
+              <Gauge />
+
+              Live Station Crowd Levels
+
+            </li>
+
+            <li>
+
+              <BellRing />
+
+              Real-Time Service Alerts
+
+            </li>
+
+            <li>
+
+              <Route />
+
+              Smart Route Recommendation
+
+            </li>
+
+          </ul>
+
+          <Link
+            href="/signup"
+            className="inline-link"
+          >
+
+            Create Passenger Account
+
+            <ArrowRight size={17} />
+
+          </Link>
+
+        </div>
+
+      </section>
+
+      <section
+        className="capabilities-section"
+        id="platform"
+      >
+
+        <div className="section-heading">
+
+          <div>
+
+            <span className="section-label">
+
+              One Connected Platform
+
+            </span>
+
+            <h2>
+
+              See Pressure.
+
+              <br />
+
+              Predict Demand.
+
+              <br />
+
+              Act Earlier.
+
+            </h2>
+
+          </div>
+
+          <p>
+
+            MetroFlow transforms operational
+            data into actionable insights,
+            helping metro operators make
+            faster and smarter decisions.
+
+          </p>
+
+        </div>
+
+        <div className="capability-grid">
+
+          {capabilities.map(
+
+            ({
+              icon: Icon,
+              number,
+              title,
+              text,
+              image,
+              alt,
+            }) => (
+
+              <article
+                key={title}
+                className="capability-card"
+              >
+
+                <div className="capability-card-top">
+
+                  <span>
+
+                    {number}
+
+                  </span>
+
+                  <Icon size={22} />
+
+                </div>
+
+                <div className="capability-image">
+
+                  <Image
+                    src={image}
+                    alt={alt}
+                    fill
+                  />
+
+                </div>
+
+                <div className="capability-copy">
+
+                  <h3>
+
+                    {title}
+
+                  </h3>
+
+                  <p>
+
+                    {text}
+
+                  </p>
+
+                </div>
+
+              </article>
+
+            )
+
+          )}
+
+        </div>
+
+      </section>
+
+      <section
+        className="impact-section"
+        id="impact"
+      >
+
+        <div>
+
+          <span className="section-label">
+
+            Built For Action
+
+          </span>
+
+          <h2>
+
+            One Shared Picture
+
+            <br />
+
+            Of The Entire Metro Network.
+
+          </h2>
+
+          <p>
+
+            MetroFlow AI provides passengers,
+            operators and metro authorities
+            with the right information at the
+            right time for smarter decisions.
+
+          </p>
+
+        </div>
+
+        <div className="role-list">
+
+          <article>
+
+            <span>
+
+              Passenger
+
+            </span>
+
+            <h3>
+
+              Plan A Better Journey
+
+            </h3>
+
+            <p>
+
+              Live crowd prediction,
+              delay notifications,
+              smart departure time,
+              and station insights.
+
+            </p>
+
+          </article>
+
+          <article>
+
+            <span>
+
+              Metro Operator
+
+            </span>
+
+            <h3>
+
+              Respond Before Congestion
+
+            </h3>
+
+            <p>
+
+              AI powered operational
+              recommendations,
+              intelligent scheduling
+              and predictive alerts.
+
+            </p>
+
+          </article>
+
+          <article>
+
+            <span>
+
+              Organization
+
+            </span>
+
+            <h3>
+
+              Improve Network Performance
+
+            </h3>
+
+            <p>
+
+              Analytics dashboards,
+              passenger trends,
+              operational KPIs
+              and long-term forecasting.
+
+            </p>
+
+          </article>
+
+        </div>
+
+      </section>
+
+      <section className="final-cta">
+
+        <div>
+
+          <span className="eyebrow">
+
+            YOUR CITY IS ALREADY MOVING
+
+          </span>
+
+          <h2>
+
+            Help It Move
+
+            <br />
+
+            Smarter With AI.
+
+          </h2>
+
+        </div>
+
+        <Link
+          href="/signup"
+          className="light-button"
+        >
+
+          Get Started
+
+          <ArrowRight size={18} />
+
+        </Link>
+
+      </section>
+
+      <footer className="site-footer">
+
+        <Link
+          href="/"
+          className="brand"
+        >
+
+          <span className="brand-mark">
+
+            <TrainFront size={20} />
+
+          </span>
+
+          <span>
+
+            MetroFlow
+
+            <strong>
+
+              {" "}AI
+
+            </strong>
+
+          </span>
+
+        </Link>
+
+        <p>
+
+          Privacy-first Artificial Intelligence
+          platform for smarter metro operations
+          and better passenger journeys.
+
+        </p>
+
+        <div>
+
+          <Link href="/login">
+
+            Login
+
+          </Link>
+
+          <Link href="/signup">
+
+            Sign Up
+
+          </Link>
+
+        </div>
+
+      </footer>
+
+    </main>
+
   );
+
 }

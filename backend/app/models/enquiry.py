@@ -1,8 +1,10 @@
+
 from datetime import datetime
 
 from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
+from sqlalchemy import Index
 from sqlalchemy import String
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -19,6 +21,12 @@ from app.mixins.timestamp import TimestampMixin
 class Enquiry(TimestampMixin, Base):
 
     __tablename__ = "enquiries"
+
+    __table_args__ = (
+        Index("ix_enquiries_user_id_created_at", "user_id", "created_at"),
+        Index("ix_enquiries_status", "status"),
+        Index("ix_enquiries_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

@@ -1,5 +1,7 @@
+
 from sqlalchemy import Boolean
 from sqlalchemy import Enum
+from sqlalchemy import Index
 from sqlalchemy import String
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,6 +17,10 @@ from app.mixins.timestamp import TimestampMixin
 class UserProfile(TimestampMixin, Base):
 
     __tablename__ = "user_profiles"
+
+    __table_args__ = (
+        Index("ix_user_profiles_created_at", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),

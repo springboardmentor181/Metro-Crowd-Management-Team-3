@@ -15,6 +15,7 @@ class RidershipByLineRow(BaseModel):
 
 class PassengerFlowOverview(BaseModel):
 
+
     window_hours: float
     total_inflow: int
     total_outflow: int

@@ -1,3 +1,4 @@
+
 import logging
 from collections import deque
 from datetime import datetime, timezone
@@ -7,6 +8,14 @@ MAX_LOG_ENTRIES = 500
 
 _buffer: deque[dict] = deque(maxlen=MAX_LOG_ENTRIES)
 _lock = Lock()
+
+
+_NOISY_THIRD_PARTY_LOGGERS = ("httpx", "httpcore")
+
+
+def _quiet_third_party_loggers() -> None:
+    for name in _NOISY_THIRD_PARTY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 class BufferLogHandler(logging.Handler):
@@ -45,6 +54,7 @@ def install() -> None:
         root.addHandler(_handler)
     if root.level == logging.NOTSET or root.level > logging.INFO:
         root.setLevel(logging.INFO)
+    _quiet_third_party_loggers()
 
 
 def get_recent_logs(limit: int = 100, level: str | None = None) -> list[dict]:

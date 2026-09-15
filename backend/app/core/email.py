@@ -1,9 +1,14 @@
+
+import logging
 import smtplib
 import ssl
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 def _build_alert_email(
     station_name: str,
@@ -65,6 +70,49 @@ def _build_alert_email(
     msg.attach(MIMEText(html, "html"))
     return msg
 
+def _smtp_code_of(exc: Exception) -> int | None:
+    code = getattr(exc, "smtp_code", None)
+    if isinstance(code, int):
+        return code
+    # SMTPRecipientsRefused carries one code per recipient instead of
+    # a single smtp_code - look at those instead.
+    recipients = getattr(exc, "recipients", None)
+    if isinstance(recipients, dict) and recipients:
+        codes = [c for c, _ in recipients.values() if isinstance(c, int)]
+        if codes:
+            return min(codes)
+    return None
+
+def _is_transient_smtp_error(exc: Exception) -> bool:
+    """True if `exc` represents a temporary condition worth retrying
+    (dropped connection, connection-refused/timed-out before the SMTP
+    session even started, or an explicit 4xx "try again later" SMTP
+    response) rather than a permanent one (bad address, rejected
+    sender, 5xx, auth failure).
+
+    NOTE: `smtplib.SMTPException` itself subclasses `OSError`, so a
+    plain `isinstance(exc, OSError)` check would also match every
+    protocol-level SMTP error (SMTPRecipientsRefused, etc.) and treat
+    permanent 5xx rejections as retryable. SMTP-protocol exceptions
+    are therefore classified by their status code FIRST; only a
+    non-SMTP exception falls through to the raw
+    connection/timeout/OSError check below.
+    """
+    if isinstance(exc, smtplib.SMTPServerDisconnected):
+        # The connection dropped mid-session with no status code at
+        # all - always worth a fresh retry.
+        return True
+    if isinstance(exc, smtplib.SMTPException):
+        code = _smtp_code_of(exc)
+        if code is not None:
+            return 400 <= code < 500
+        # No status code to go on (e.g. some SMTPAuthenticationError
+        # cases) - treat as permanent rather than retry blind.
+        return False
+    # Not an SMTP-protocol exception at all: a genuine transport-level
+    # failure (connection refused, DNS failure, connect timeout).
+    return isinstance(exc, (TimeoutError, ConnectionError, OSError))
+
 def send_alert_emails(
     recipients: list[str],
     station_name: str,
@@ -74,6 +122,7 @@ def send_alert_emails(
     available_until: str | None = None,
     resolved: bool = False,
 ) -> dict[str, str]:
+    
     results: dict[str, str] = {}
 
     if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
@@ -97,45 +146,67 @@ def send_alert_emails(
         conn.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
         return conn
 
-    server = None
+    max_attempts = max(settings.NOTIFICATION_SEND_MAX_ATTEMPTS, 1)
+    backoff_floor = settings.NOTIFICATION_SEND_RETRY_BACKOFF_SECONDS
+    backoff_cap = settings.NOTIFICATION_SEND_RETRY_BACKOFF_CAP_SECONDS
+
+    server: smtplib.SMTP | None = None
     try:
-        server = _connect()
+        try:
+            server = _connect()
+        except Exception as exc:
+            # Couldn't even establish the initial connection - still
+            # give it the same transient-retry treatment per recipient
+            # below rather than failing the whole batch outright, in
+            # case it recovers a moment later.
+            server = None
+            initial_connect_error: Exception | None = exc
+        else:
+            initial_connect_error = None
 
         for recipient in recipients:
-            try:
-                                                                      
-                del email_msg["To"]
-                email_msg["To"] = recipient
+            del email_msg["To"]
+            email_msg["To"] = recipient
 
+            last_exc: Exception | None = initial_connect_error
+            backoff = backoff_floor
+            for attempt in range(1, max_attempts + 1):
                 try:
+                    if server is None:
+                        server = _connect()
                     server.sendmail(
                         settings.SMTP_FROM_EMAIL, recipient, email_msg.as_string()
                     )
-                except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError):
-                                                                    
+                    results[recipient] = "sent"
+                    last_exc = None
+                    break
+                except Exception as exc:
+                    last_exc = exc
                     try:
-                        server.quit()
+                        if server is not None:
+                            server.quit()
                     except Exception:
                         pass
-                    server = _connect()
-                    server.sendmail(
-                        settings.SMTP_FROM_EMAIL, recipient, email_msg.as_string()
+                    server = None
+
+                    if not _is_transient_smtp_error(exc) or attempt == max_attempts:
+                        break
+
+                    logger.warning(
+                        "[email] transient send failure to %s (attempt %d/%d): %s - "
+                        "retrying in %.1fs.",
+                        recipient, attempt, max_attempts, exc, backoff,
                     )
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, backoff_cap)
 
-                results[recipient] = "sent"
-            except Exception as exc:
-                results[recipient] = f"failed: {exc}"
-
-    except Exception as exc:
-                                                                     
-        for recipient in recipients:
-            if recipient not in results:
-                results[recipient] = f"failed: {exc}"
+            if last_exc is not None:
+                results[recipient] = f"failed: {last_exc}"
     finally:
-        if server is not None:
-            try:
+        try:
+            if server is not None:
                 server.quit()
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     return results

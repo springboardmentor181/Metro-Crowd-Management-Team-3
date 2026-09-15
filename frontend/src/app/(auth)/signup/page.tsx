@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Crown,
+  Loader2,
   Mail,
   Moon,
   Sun,
@@ -23,6 +24,8 @@ import { useTheme } from "next-themes";
 import { accountRoles } from "@/lib/auth-roles";
 import type { AccountRole } from "@/lib/auth-roles";
 import { createClient } from "@/lib/supabase/client";
+import { signInWithGoogle } from "@/lib/auth/oauth";
+import { GoogleIcon } from "@/components/icons/GoogleIcon";
 
 const roleIcons = {
   passenger: UserRound,
@@ -36,21 +39,22 @@ export default function SignupPage() {
 
   const [selectedRole, setSelectedRole] =
     useState<AccountRole>("passenger");
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] =
     useState("");
   const [confirmPassword, setConfirmPassword] =
     useState("");
+  const [phone, setPhone] = useState("");
+
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] =
     useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
-  // Avoids a hydration mismatch: the server can't know the user's
-  // stored/system theme, so it always renders the "light" icon. Until
-  // this component mounts on the client, keep rendering that same
-  // icon instead of branching on resolvedTheme.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -81,6 +85,8 @@ export default function SignupPage() {
         options: {
           data: {
             full_name: fullName,
+            ...(username.trim() ? { username: username.trim() } : {}),
+            ...(phone.trim() ? { phone: phone.trim() } : {}),
             requested_role: selectedRole,
             role:
               selectedRole === "passenger"
@@ -112,6 +118,21 @@ export default function SignupPage() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleGoogleSignup() {
+    setGoogleBusy(true);
+    setErrorMessage("");
+    try {
+      await signInWithGoogle("/dashboard");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Couldn't start Google sign-in.",
+      );
+      setGoogleBusy(false);
     }
   }
 
@@ -252,6 +273,22 @@ export default function SignupPage() {
               />
             </label>
 
+            <label>
+              <span>Username <span className="auth-optional-tag">(optional)</span></span>
+
+              <input
+                type="text"
+                autoComplete="username"
+                minLength={3}
+                maxLength={30}
+                value={username}
+                onChange={(event) =>
+                  setUsername(event.target.value)
+                }
+                placeholder="shubham_k"
+              />
+            </label>
+
             <div className="auth-form-row">
               <label>
                 Password
@@ -288,6 +325,21 @@ export default function SignupPage() {
               </label>
             </div>
 
+            <label>
+              <span>Phone number <span className="auth-optional-tag">(optional)</span></span>
+
+              <input
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="+91 98765 43210"
+              />
+            </label>
+            <p className="auth-field-hint">
+              Add this to also receive station alerts by SMS. You can add or change it later from your profile.
+            </p>
+
             {selectedRole !== "passenger" && (
               <div className="admin-information">
                 Operator and admin signups are stored as requests. Set <strong>app_metadata.role</strong> to <strong>{selectedRole}</strong> in Supabase after approval.
@@ -320,10 +372,34 @@ export default function SignupPage() {
             </button>
           </form>
 
+          <div className="auth-divider">
+            <span>or</span>
+          </div>
+
+          <button
+            type="button"
+            className="auth-google-button"
+            onClick={handleGoogleSignup}
+            disabled={googleBusy}
+          >
+            {googleBusy ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <GoogleIcon size={18} />
+            )}
+            {googleBusy ? "Redirecting..." : "Continue with Google"}
+          </button>
+
           <p className="auth-switch-text">
             Already registered?{" "}
 
             <Link href="/login">Sign in</Link>
+          </p>
+
+          <p className="auth-switch-text">
+            Prefer phone?{" "}
+
+            <Link href="/login">Use it on the sign-in page</Link>
           </p>
         </div>
       </section>

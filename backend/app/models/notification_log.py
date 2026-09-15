@@ -1,8 +1,10 @@
+
 from datetime import datetime
 
 from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
+from sqlalchemy import Index
 from sqlalchemy import String
 
 from sqlalchemy.orm import Mapped
@@ -18,10 +20,20 @@ class NotificationLog(TimestampMixin, Base):
 
     __tablename__ = "notification_logs"
 
+    __table_args__ = (
+        Index("ix_notification_logs_alert_id_created_at", "alert_id", "created_at"),
+
+        Index("ix_notification_logs_job_channel_recipient", "job_id", "channel", "recipient"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
 
     alert_id: Mapped[int] = mapped_column(
         ForeignKey("alerts.id")
+    )
+
+    job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("notification_dispatch_jobs.id"), nullable=True
     )
 
     channel: Mapped[NotificationChannel] = mapped_column(

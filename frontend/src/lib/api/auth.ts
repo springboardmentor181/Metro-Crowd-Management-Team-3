@@ -1,33 +1,15 @@
-import { createClient } from "@/lib/supabase/client";
+import api from "@/lib/axios";
+import type { UserProfile } from "@/lib/api/types";
 
-interface ProfileRecord {
-  role: string;
+export async function getCurrentProfile(): Promise<UserProfile> {
+  const { data } = await api.get<UserProfile>("/api/v1/auth/me");
+  return data;
 }
 
-export async function getCurrentProfile() {
-  const supabase = createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) {
-    throw userError;
-  }
-
-  if (!user) {
-    throw new Error("No authenticated user found.");
-  }
-
-  const { data, error } = await supabase
-    .from<ProfileRecord>("user_profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single();
-
-  if (error || !data) {
-    throw error ?? new Error("Could not load user profile.");
-  }
-
+export async function updateProfile(
+  userId: string,
+  payload: Partial<Pick<UserProfile, "full_name" | "username" | "phone" | "avatar_url">>,
+): Promise<UserProfile> {
+  const { data } = await api.put<UserProfile>(`/api/v1/users/${userId}`, payload);
   return data;
 }

@@ -4,6 +4,7 @@ from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import Float
 from sqlalchemy import ForeignKey
+from sqlalchemy import Index
 from sqlalchemy import Integer
 
 from sqlalchemy.orm import Mapped
@@ -17,6 +18,15 @@ from app.mixins.timestamp import TimestampMixin
 class Prediction(TimestampMixin, Base):
 
     __tablename__ = "predictions"
+
+    __table_args__ = (
+        Index("ix_predictions_created_at", "created_at"),
+
+        Index(
+            "ix_predictions_station_id_type_target",
+            "station_id", "prediction_type", "target_datetime",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
