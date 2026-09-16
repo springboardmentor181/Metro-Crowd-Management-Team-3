@@ -1,0 +1,610 @@
+from datetime import datetime, timedelta, timezone
+from typing import Callable
+import time
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.ai_engine.prediction.crowd_predictor import predict_crowd
+from app.ai_engine.prediction.delay_predictor import predict_delay
+from app.ai_engine.prediction.frequency_predictor import recommend_frequency
+from app.core import cache
+from app.enums.crowd_level import CrowdLevel
+from app.enums.prediction_type import PredictionType
+from app.models.prediction import Prediction
+from app.models.station import Station
+from app.utils.timezone import to_business_time
+
+PREDICTION_CACHE_TTL_SECONDS = 300
+
+PREDICTION_TTL = PREDICTION_CACHE_TTL_SECONDS
+
+
+DEFAULT_CAPACITY_FALLBACK = 2400
+
+MAX_DEMAND_FORECAST_HOURS_AHEAD = 168
+
+def _cached_prediction(cache_key: str, compute: Callable[[], dict]) -> dict:
+
+    cached = cache.get_json(cache_key)
+    if cached is not None:
+        if cached.get("target_datetime"):
+            cached["target_datetime"] = datetime.fromisoformat(cached["target_datetime"])
+        return cached
+
+    result = compute()
+    cache.set_json(cache_key, result, ttl_seconds=PREDICTION_CACHE_TTL_SECONDS)
+    return result
+
+def _cache_key_bucket(target_datetime: datetime) -> str:
+    
+    return target_datetime.replace(minute=0, second=0, microsecond=0).isoformat()
+
+def _crowd_cache_key(station_id: int, target_datetime: datetime, light: bool = False) -> str:
+    return f"predict:crowd:{station_id}:{_cache_key_bucket(target_datetime)}:{light}"
+
+def _delay_cache_key(station_id: int, target_datetime: datetime, train_id: int | None = None) -> str:
+    return f"predict:delay:{station_id}:{_cache_key_bucket(target_datetime)}:{train_id}"
+
+def _frequency_cache_key(station_id: int, target_datetime: datetime) -> str:
+    return f"predict:frequency:{station_id}:{_cache_key_bucket(target_datetime)}"
+
+def _cached_predict_crowd(station_id: int, target_datetime: datetime, light: bool = False) -> dict:
+    key = _crowd_cache_key(station_id, target_datetime, light)
+    return _cached_prediction(key, lambda: predict_crowd(station_id, target_datetime, light=light))
+
+def _cached_predict_delay(db: Session, station_id: int, target_datetime: datetime, train_id: int | None = None) -> dict:
+                                                                     
+    key = _delay_cache_key(station_id, target_datetime, train_id)
+    return _cached_prediction(key, lambda: predict_delay(station_id, target_datetime, train_id=train_id, db=db))
+
+def _cached_recommend_frequency(station_id: int, target_datetime: datetime) -> dict:
+    key = _frequency_cache_key(station_id, target_datetime)
+    return _cached_prediction(key, lambda: recommend_frequency(station_id, target_datetime))
+
+def _save_prediction(
+    db: Session,
+    station_id: int,
+    prediction_type: PredictionType,
+    predicted_value: float,
+    confidence: float,
+    target_datetime: datetime,
+    model_version: str,
+    commit: bool = True,
+) -> Prediction:
+    record = Prediction(
+        station_id=station_id,
+        prediction_type=prediction_type,
+        predicted_value=predicted_value,
+        predicted_count=round(predicted_value) if prediction_type in (
+            PredictionType.CROWD, PredictionType.DEMAND
+        ) else None,
+        confidence=confidence,
+        target_datetime=target_datetime,
+        model_version=model_version,
+    )
+    db.add(record)
+                                                                   
+    if commit:
+        db.commit()
+        db.refresh(record)
+    return record
+
+PREDICTION_WRITE_DEDUPE_SECONDS = PREDICTION_CACHE_TTL_SECONDS
+
+def _get_or_save_prediction(
+    db: Session,
+    *,
+    station_id: int,
+    prediction_type: PredictionType,
+    predicted_value: float,
+    confidence: float,
+    target_datetime: datetime,
+    model_version: str,
+    commit: bool = True,
+) -> Prediction:
+    
+    dedupe_key = (
+        f"predictions:write:{prediction_type.value}:{station_id}:"
+        f"{target_datetime.isoformat() if hasattr(target_datetime, 'isoformat') else target_datetime}"
+    )
+
+    if cache.set_nx(dedupe_key, PREDICTION_WRITE_DEDUPE_SECONDS):
+        return _save_prediction(
+            db,
+            station_id=station_id,
+            prediction_type=prediction_type,
+            predicted_value=predicted_value,
+            confidence=confidence,
+            target_datetime=target_datetime,
+            model_version=model_version,
+            commit=commit,
+        )
+
+    for attempt in range(3):
+        existing = (
+            db.query(Prediction)
+            .filter(
+                Prediction.station_id == station_id,
+                Prediction.prediction_type == prediction_type,
+                Prediction.target_datetime == target_datetime,
+            )
+            .order_by(Prediction.created_at.desc())
+            .first()
+        )
+        if existing is not None:
+            return existing
+        if attempt < 2:
+            time.sleep(0.05)
+
+    return _save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=prediction_type,
+        predicted_value=predicted_value,
+        confidence=confidence,
+        target_datetime=target_datetime,
+        model_version=model_version,
+        commit=commit,
+    )
+
+def _require_station(db: Session, station_id: int) -> Station:
+    station = db.get(Station, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    return station
+
+def forecast_crowd(db: Session, station_id: int, target_datetime: datetime | None = None) -> Prediction:
+    """Crowd prediction models."""
+    _require_station(db, station_id)
+    dt = target_datetime or datetime.now(timezone.utc)
+    result = _cached_predict_crowd(station_id, dt)
+    record = _get_or_save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.CROWD,
+        predicted_value=result["predicted_count"],
+        confidence=result["confidence"],
+        target_datetime=result["target_datetime"],
+        model_version=result["model_version"],
+    )
+
+    record.models = result.get("models", {})
+    return record
+
+def forecast_demand(db: Session, station_id: int, hours_ahead: int = 6) -> list[Prediction]:
+    """Passenger demand forecasting: hour-by-hour for the next N hours.
+
+    `hours_ahead` is clamped to [1, MAX_DEMAND_FORECAST_HOURS_AHEAD] -
+    see that constant's comment above for why."""
+    _require_station(db, station_id)
+    hours_ahead = min(max(hours_ahead or 1, 1), MAX_DEMAND_FORECAST_HOURS_AHEAD)
+    now = datetime.now(timezone.utc)
+    records = []
+    for i in range(1, hours_ahead + 1):
+        target = now + timedelta(hours=i)
+        result = _cached_predict_crowd(station_id, target)
+        record = _get_or_save_prediction(
+            db,
+            station_id=station_id,
+            prediction_type=PredictionType.DEMAND,
+            predicted_value=result["predicted_count"],
+            confidence=result["confidence"],
+            target_datetime=result["target_datetime"],
+            model_version=result["model_version"],
+            commit=False,
+        )
+        records.append(record)
+                                                                
+    db.commit()
+    for record in records:
+        db.refresh(record)
+    return records
+
+def forecast_delay(db: Session, train_id: int, station_id: int) -> Prediction:
+    """Delay impact prediction, feeding the Scheduling Management Module."""
+    _require_station(db, station_id)
+    dt = datetime.now(timezone.utc)
+    result = _cached_predict_delay(db, station_id, dt, train_id=train_id)
+    record = _get_or_save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.DELAY,
+        predicted_value=result["predicted_delay_minutes"],
+        confidence=0.7,
+        target_datetime=result["target_datetime"],
+        model_version=result["model_version"],
+    )
+
+    record.models = result.get("models", {})
+    return record
+
+def recommend_train_frequency(db: Session, station_id: int, is_peak_hour: bool = False) -> Prediction:
+    """Train frequency recommendations / resource utilization optimization."""
+    _require_station(db, station_id)
+    target = datetime.now(timezone.utc)
+    if is_peak_hour:
+        # BUGFIX (naive datetime / timezone handling): "9am" here means
+        # 9am for the metro network being scheduled, not 9am UTC -
+        # forcing `hour=9` directly on a UTC-aware datetime (the old
+        # code) pinned this to a UTC instant that recommend_frequency's
+        # own business-timezone peak-hour check (see
+        # app/ai_engine/prediction/frequency_predictor.py) could then
+        # disagree with. Resolved in the business timezone instead, so
+        # the forced hour and the peak-hour check it feeds agree.
+        target = to_business_time(target).replace(hour=9)
+    result = _cached_recommend_frequency(station_id, target)
+    record = _get_or_save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.FREQUENCY,
+        predicted_value=result["recommended_frequency_minutes"],
+        confidence=0.75,
+        target_datetime=result["target_datetime"],
+        model_version=result["model_version"],
+    )
+    # Same as forecast_crowd above: attach the random_forest/xgboost
+    # breakdown that recommend_frequency() already computes but that
+    # has no DB column to live in, so the API response can carry it too.
+    record.models = result.get("models", {})
+    return record
+
+def traffic_pattern_analysis(db: Session, station_id: int) -> dict:
+    """Traffic pattern analysis: 24h predicted demand curve for a station."""
+    _require_station(db, station_id)
+    # BUGFIX (naive datetime / timezone handling): this used to anchor
+    # the 24-hour curve on the UTC "now", then label each of the 24
+    # points with a raw hour-of-day (0-23) and flag "is_peak_hour"
+    # against that same raw number - i.e. treating a UTC hour as if it
+    # were the metro network's local hour. Anchored in the app's
+    # business timezone instead, so "hour": 9 in the response really
+    # is 9am for the network being analyzed, and lines up with the
+    # business-local peak-hour check crowd_predictor.predict_crowd
+    # itself now applies. See app/utils/timezone.py.
+    now = to_business_time(datetime.now(timezone.utc)).replace(minute=0, second=0, microsecond=0)
+    curve = []
+    for hour in range(24):
+        target = now.replace(hour=hour)
+                                                                       
+        result = _cached_predict_crowd(station_id, target, light=True)
+        curve.append({
+            "hour": hour,
+            "predicted_count": result["predicted_count"],
+            "is_peak_hour": 8 <= hour <= 11 or 17 <= hour <= 20,
+        })
+
+    peak = max(curve, key=lambda c: c["predicted_count"])
+    trough = min(curve, key=lambda c: c["predicted_count"])
+
+    return {
+        "station_id": station_id,
+        "hourly_forecast": curve,
+        "peak_hour": peak["hour"],
+        "peak_predicted_count": peak["predicted_count"],
+        "quietest_hour": trough["hour"],
+    }
+
+def all_stations_traffic_pattern(db: Session, state: str | None = None) -> dict:
+    """Same 24h predicted-demand curve as traffic_pattern_analysis, but
+    summed across every station (optionally scoped to `state`) in ONE
+    call, instead of the caller having to fan out a separate request
+    per station.
+
+    This exists because the "Passenger Analytics" dashboard widget
+    needs an all-stations total, and was previously built by having
+    the FRONTEND call GET /traffic-pattern/{station_id} once per
+    station via Promise.all() - one HTTP request, one DB round trip,
+    and 24 model lookups PER STATION, all fired in parallel on every
+    page load. Two compounding problems with that:
+
+    1. This endpoint is rate-limited at 20/minute per IP (see the
+       module docstring in api/v1/prediction.py - deliberate, since
+       every call here can run an ML model). A city with more than
+       ~20 stations blew straight through that limit on a single page
+       load, so most of those per-station requests came back 429 and
+       the widget surfaced "Couldn't load the forecast right now" -
+       not because the prediction service was actually slow or down,
+       but because the page itself DDoS'd its own rate limiter.
+    2. Even the requests that didn't get rate-limited meant dozens of
+       concurrent DB session / ML calls competing for the same
+       process, which is what made the ones that DID succeed take
+       far longer than a single request should.
+
+    Computing the sum server-side keeps the exact same per-station,
+    per-hour Redis-cached prediction calls (so the actual compute cost
+    doesn't change and every value stays independently verifiable),
+    but collapses N HTTP requests and N rate-limit hits into 1.
+    """
+                                                                   
+    cache_key = f"predict:traffic-pattern-aggregate:{state or 'all'}"
+    cached = cache.get_json(cache_key)
+    if cached is not None:
+        return cached
+
+    from app.ai_engine.prediction.crowd_predictor import predict_crowd_bulk
+    from app.utils.geo import cities_for_state
+
+    cities = cities_for_state(state)
+    query = db.query(Station)
+    if cities:
+        query = query.filter(Station.city.in_(cities))
+    stations = query.all()
+
+    # BUGFIX (naive datetime / timezone handling): same fix as
+    # traffic_pattern_analysis above - anchored in the business
+    # timezone so the `hours` 0-23 fed into predict_crowd_bulk (and its
+    # day-of-week derived from `now`) line up with local business hours
+    # instead of UTC ones. See app/utils/timezone.py.
+    now = to_business_time(datetime.now(timezone.utc)).replace(minute=0, second=0, microsecond=0)
+    station_ids = [s.id for s in stations]
+    hours = list(range(24))
+
+    # One vectorized model call for every (station, hour) pair instead
+    # of 24 x len(stations) individual predict_crowd() calls in a loop
+    # (see predict_crowd_bulk's docstring) - this is what was making
+    # this endpoint slow enough to time out on a cache-cold request.
+    bulk_results = predict_crowd_bulk(station_ids, hours, now)
+
+    totals = [0] * 24
+    for station_id in station_ids:
+        for hour in hours:
+            totals[hour] += bulk_results[(station_id, hour)]["predicted_count"]
+
+    curve = [
+        {
+            "hour": hour,
+            "predicted_count": totals[hour],
+            "is_peak_hour": 8 <= hour <= 11 or 17 <= hour <= 20,
+        }
+        for hour in range(24)
+    ]
+    peak = max(curve, key=lambda c: c["predicted_count"])
+    trough = min(curve, key=lambda c: c["predicted_count"])
+
+    response = {
+        "station_count": len(stations),
+        "hourly_forecast": curve,
+        "peak_hour": peak["hour"],
+        "peak_predicted_count": peak["predicted_count"],
+        "quietest_hour": trough["hour"],
+    }
+    cache.set_json(cache_key, response, ttl_seconds=PREDICTION_CACHE_TTL_SECONDS)
+    return response
+
+# Phase 1 (P0-1 / P2-3) fix. Two independent problems used to compound
+# here:
+#
+#   1. The frontend (AIInsights.tsx) fanned out one HTTP GET per
+#      station - up to MAX_STATIONS_ANALYZED=15 of them, in parallel,
+#      on every dashboard load AND on every single live `crowd_update`/
+#      `delay_alert`/`station_alert` WebSocket event (roughly once per
+#      SIMULATOR_INTERVAL_SECONDS). See smart_recommendations_bulk()
+#      below and AIInsights.tsx for the frontend half of this fix.
+#   2. Independent of #1: every single call to this function - even a
+#      pure cache HIT that recomputed nothing - unconditionally wrote 3
+#      new `Prediction` rows and committed. That meant DB writes scaled
+#      with *dashboard views*, not with *actual new predictions
+#      computed*, so the row count grew unbounded purely from people
+#      looking at the AI Insights panel.
+#
+# RECOMMENDATION_WRITE_DEDUPE_SECONDS decouples "record recent AI
+# activity for the Activity Timeline widget" from "write on every
+# request": a station's 3 predictions are persisted at most once per
+# window, no matter how many times smart_recommendations()/
+# smart_recommendations_bulk() is called for it in between - by a
+# single dashboard tab refreshing, several tabs open at once, or the
+# bulk endpoint being hit repeatedly. This is a separate Redis key from
+# PREDICTION_CACHE_TTL_SECONDS (the *value* cache) - a value-cache hit
+# and a write-dedupe hit are different questions ("do I need to
+# recompute?" vs "do I need to record this?").
+RECOMMENDATION_WRITE_DEDUPE_SECONDS = 60
+
+def _maybe_persist_recommendation_predictions(
+    db: Session, station_id: int, crowd: dict, delay: dict, frequency: dict,
+) -> None:
+    """Persist the crowd/delay/frequency predictions backing a
+    smart-recommendations call, but at most once per station per
+    RECOMMENDATION_WRITE_DEDUPE_SECONDS - see the module-level comment
+    above (Phase 1, P2-3) for why this guard exists."""
+    dedupe_key = f"predictions:reco-write:{station_id}"
+    if not cache.set_nx(dedupe_key, RECOMMENDATION_WRITE_DEDUPE_SECONDS):
+        return
+
+    _save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.CROWD,
+        predicted_value=crowd["predicted_count"],
+        confidence=crowd["confidence"],
+        target_datetime=crowd["target_datetime"],
+        model_version=crowd["model_version"],
+        commit=False,
+    )
+    _save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.DELAY,
+        predicted_value=delay["predicted_delay_minutes"],
+        confidence=0.7,
+        target_datetime=delay["target_datetime"],
+        model_version=delay["model_version"],
+        commit=False,
+    )
+    _save_prediction(
+        db,
+        station_id=station_id,
+        prediction_type=PredictionType.FREQUENCY,
+        predicted_value=frequency["recommended_frequency_minutes"],
+        confidence=0.75,
+        target_datetime=frequency["target_datetime"],
+        model_version=frequency["model_version"],
+        commit=False,
+    )
+    db.commit()
+
+
+# Phase 3 fix (docs/crowd-data-correctness.md, Bug 5). This used to be a flat
+# `crowd["predicted_count"] > 800` for EVERY station regardless of that
+# station's actual scale - a small station whose real hourly throughput
+# never goes much above 200 would never fire, while a large interchange
+# whose normal throughput comfortably exceeds 800 would be flagged
+# "high crowd" constantly, alert-fatigue style.
+#
+# `crowd["predicted_count"]` is the crowd model's predicted hourly
+# throughput (entries + exits) - the same quantity the real dataset's
+# own `crowding_index` column is built from (crowding_index =
+# (entries + exits) / capacity - verified directly against
+# passenger_flow.csv.gz, see docs/crowd-data-correctness.md). So the
+# apples-to-apples, per-station-scaled threshold is the SAME
+# capacity-relative ratio the dataset itself uses, calibrated against
+# its own "Crowded" cutoff (0.35 - see app/enums/crowd_level.py's
+# MODERATE_MAX_RATIO, measured off the same column). A predicted
+# throughput at or above 35% of a station's capacity is exactly what
+# the dataset itself would label "Crowded" or worse for that station.
+HIGH_CROWD_THROUGHPUT_RATIO = 0.35
+
+def _build_recommendations(
+    station_id: int, crowd: dict, delay: dict, frequency: dict, capacity: int | None = None,
+) -> list[dict]:
+    """Pure formatting: turn a (crowd, delay, frequency) prediction
+    triple into the list of recommendation cards the frontend renders.
+    Extracted out of smart_recommendations() so smart_recommendations_bulk()
+    can reuse the exact same rules for many stations without duplicating
+    them (and without re-fetching/re-persisting predictions itself).
+
+    `capacity` is the station's real, per-station capacity (see
+    docs/crowd-data-correctness.md Bug 2) - callers should always pass it;
+    it's optional only so this stays testable/callable in isolation.
+    When omitted, DEFAULT_CAPACITY_FALLBACK is used so the ratio-based
+    check still degrades gracefully instead of throwing.
+    """
+    recommendations = []
+    effective_capacity = capacity or DEFAULT_CAPACITY_FALLBACK
+    crowd_ratio = crowd["predicted_count"] / effective_capacity if effective_capacity else 0
+
+    if crowd_ratio > HIGH_CROWD_THROUGHPUT_RATIO:
+        recommendations.append({
+            "station_id": station_id,
+            "title": "High crowd expected",
+            "detail": f"Predicted ~{crowd['predicted_count']} passengers "
+                      f"({crowd_ratio * 100:.0f}% of this station's capacity). "
+                      f"Consider deploying additional staff and opening extra gates.",
+            "severity": "warning",
+        })
+
+    if delay["predicted_delay_minutes"] > 3:
+        recommendations.append({
+            "station_id": station_id,
+            "title": "Delay risk",
+            "detail": f"Model predicts ~{delay['predicted_delay_minutes']} min of delay "
+                      f"driven by current congestion levels.",
+            "severity": "warning",
+        })
+
+    recommendations.append({
+        "station_id": station_id,
+        "title": "Frequency suggestion",
+        "detail": f"Recommended train interval: {frequency['recommended_frequency_minutes']} min "
+                  f"({'peak' if frequency['is_peak_hour'] else 'off-peak'} slot).",
+        "severity": "info",
+    })
+
+    if not recommendations:
+        recommendations.append({
+            "station_id": station_id,
+            "title": "Normal operations",
+            "detail": "No anomalies detected; current schedule and staffing look adequate.",
+            "severity": "info",
+        })
+
+    return recommendations
+
+def smart_recommendations(db: Session, station_id: int) -> list[dict]:
+    """Smart recommendations combining crowd + delay + frequency predictions
+    for a single station. Kept for callers that only ever need one
+    station; see smart_recommendations_bulk() for the many-stations-in-
+    one-call version the dashboard actually uses now."""
+    station = _require_station(db, station_id)
+    dt = datetime.now(timezone.utc)
+    crowd = _cached_predict_crowd(station_id, dt)
+    delay = _cached_predict_delay(db, station_id, dt)
+    frequency = _cached_recommend_frequency(station_id, dt)
+
+    _maybe_persist_recommendation_predictions(db, station_id, crowd, delay, frequency)
+
+    return _build_recommendations(station_id, crowd, delay, frequency, capacity=station.capacity)
+
+def smart_recommendations_bulk(db: Session, station_ids: list[int]) -> dict[int, list[dict]]:
+    """Same recommendations as smart_recommendations(), for many
+    stations in ONE call - the exact pattern already used by
+    all_stations_traffic_pattern() (see its docstring) to fix the
+    identical class of problem for the traffic-pattern widget, applied
+    here to the AI Insights panel (Phase 1, P0-1).
+
+    Previously, AIInsights.tsx ranked up to MAX_STATIONS_ANALYZED=15
+    stations by occupancy and fired 15 parallel
+    `GET /predictions/recommendations/{station_id}` calls via
+    Promise.all() - on every dashboard load AND on every single live
+    crowd/delay/station-alert WebSocket event (roughly every
+    SIMULATOR_INTERVAL_SECONDS=10s). That's up to 90 rate-limited calls
+    per minute from a single browser tab against an endpoint capped at
+    20/minute per IP, so most of them came back 429, and (independent
+    of the 429s) every *successful* call still wrote 3 Prediction rows
+    per the pre-fix version of _save_prediction usage above.
+
+    Collapsing this to one endpoint means: 1 rate-limit slot consumed
+    per refresh instead of up to 15, and the per-station cached
+    crowd/delay/frequency lookups (_cached_predict_crowd etc.) are
+    still reused across stations exactly as before - no compute or
+    caching behaviour changes per station, only the transport (1 HTTP
+    round trip instead of N) and the write path (see
+    _maybe_persist_recommendation_predictions above) change.
+    """
+    dt = datetime.now(timezone.utc)
+    # One query for every station's capacity instead of one per
+    # station in the loop below (same N+1-avoidance pattern already
+    # used elsewhere in this file/module - e.g. predict_crowd_bulk).
+    capacities = dict(
+        db.query(Station.id, Station.capacity)
+        .filter(Station.id.in_(station_ids))
+        .all()
+    )
+    results: dict[int, list[dict]] = {}
+    for station_id in station_ids:
+        crowd = _cached_predict_crowd(station_id, dt)
+        delay = _cached_predict_delay(db, station_id, dt)
+        frequency = _cached_recommend_frequency(station_id, dt)
+
+        _maybe_persist_recommendation_predictions(db, station_id, crowd, delay, frequency)
+
+        results[station_id] = _build_recommendations(
+            station_id, crowd, delay, frequency, capacity=capacities.get(station_id),
+        )
+    return results
+
+def get_crowd_model_metrics() -> dict:
+    """New: live evaluation metrics for the production crowd/demand model
+    (same trained model backs both - see forecast_demand above),
+    computed from the real passenger_flow.csv held-out test split. Powers
+    the AI Prediction dashboard page."""
+    from app.ai_engine.prediction.crowd_metrics import compute_crowd_metrics
+
+    return compute_crowd_metrics()
+
+def get_delay_model_metrics() -> dict:
+    """New: live evaluation metrics for the production delay model,
+    computed from the real train_operations.csv held-out test split.
+    Same role as get_crowd_model_metrics above; powers the delay
+    section of the AI Prediction dashboard page."""
+    from app.ai_engine.prediction.delay_metrics import compute_delay_metrics
+
+    return compute_delay_metrics()
+
+def get_frequency_model_metrics() -> dict:
+    """New: live evaluation metrics for the production train-frequency
+    recommendation model, computed from the real passenger_flow.csv
+    held-out test split. Same role as get_crowd_model_metrics above;
+    powers the frequency section of the AI Prediction dashboard page."""
+    from app.ai_engine.prediction.frequency_metrics import compute_frequency_metrics
+
+    return compute_frequency_metrics()
